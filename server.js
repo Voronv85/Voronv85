@@ -1,29 +1,31 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const cors = require('cors');
-const bodyParser = require('body-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Путь к файлу stats.json
 const STATS_FILE_PATH = path.join(__dirname, 'stats.json');
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(express.static(__dirname)); // Раздаём статические файлы
+app.use(express.json());
+app.use(express.static(__dirname));
 
-// Получение всей статистики
+// Получить всю статистику
 app.get('/api/stats', (req, res) => {
-  const data = fs.readFileSync(STATS_FILE_PATH);
-  res.json(JSON.parse(data));
+  try {
+    const data = fs.readFileSync(STATS_FILE_PATH);
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.status(500).send({ error: "Не удалось прочитать файл" });
+  }
 });
 
-// Обновление статистики игрока
+// Обновить статистику игрока
 app.post('/api/update', (req, res) => {
-  const { username, wins, losses, level } = req.body;
-  if (!username) return res.status(400).send('Имя пользователя обязательно');
+  const { id, name, wins, losses, level } = req.body;
+
+  if (!id || wins === undefined || losses === undefined || level === undefined) {
+    return res.status(400).send('Не все обязательные поля переданы');
+  }
 
   let stats = {};
   try {
@@ -33,7 +35,7 @@ app.post('/api/update', (req, res) => {
     console.error("Ошибка чтения файла:", err);
   }
 
-  stats[username] = { wins, losses, level };
+  stats[id] = { name, wins, losses, level };
   fs.writeFileSync(STATS_FILE_PATH, JSON.stringify(stats, null, 2));
 
   res.json({ success: true });
