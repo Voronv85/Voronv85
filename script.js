@@ -34,6 +34,27 @@ async function getAllStats() {
   }
 }
 
+async function createPlayerIfNotExists(username) {
+  const stats = await getAllStats();
+  if (!stats[username]) {
+    // Новый игрок — добавляем с нулевой статистикой
+    await updatePlayerStats(username, { wins: 0, losses: 0, level: 1 });
+    console.log(`Новый игрок добавлен: ${username}`);
+  }
+}
+
+async function updatePlayerStats(username, stats) {
+  try {
+    await fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, ...stats }),
+    });
+  } catch (err) {
+    console.error("Ошибка сохранения статистики:", err);
+  }
+}
+
 function showInputForm(browserId) {
   app.innerHTML = `
     <label for="username">Введите ваше имя:</label>
@@ -133,13 +154,15 @@ function resetName() {
   location.reload();
 }
 
-window.onload = () => {
+window.onload = async () => {
   const storedName = localStorage.getItem("username");
   const browserId = generateBrowserId();
 
   if (storedName) {
+    await createPlayerIfNotExists(storedName);
     showGameMenu(storedName);
   } else {
+    await createPlayerIfNotExists(browserId);
     showInputForm(browserId);
   }
 };
