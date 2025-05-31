@@ -1,41 +1,45 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
+const bodyParser = require('body-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'data', 'players.json');
 
-app.use(express.json());
-app.use(express.static(__dirname));
+// Путь к файлу stats.json
+const STATS_FILE_PATH = path.join(__dirname, 'stats.json');
 
-// Сохраняем результат игрока
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.static(__dirname)); // Раздаём статические файлы
+
+// Получение всей статистики
+app.get('/api/stats', (req, res) => {
+  const data = fs.readFileSync(STATS_FILE_PATH);
+  res.json(JSON.parse(data));
+});
+
+// Обновление статистики игрока
 app.post('/api/update', (req, res) => {
-  const { name, score } = req.body;
+  const { username, wins, losses, level } = req.body;
+  if (!username) return res.status(400).send('Имя пользователя обязательно');
 
-  let players = [];
-  if (fs.existsSync(DATA_FILE)) {
-    const data = fs.readFileSync(DATA_FILE);
-    players = JSON.parse(data);
+  let stats = {};
+  try {
+    const data = fs.readFileSync(STATS_FILE_PATH);
+    stats = JSON.parse(data);
+  } catch (err) {
+    console.error("Ошибка чтения файла:", err);
   }
 
-  const playerIndex = players.findIndex(p => p.name === name);
-  if (playerIndex > -1) {
-    players[playerIndex].score += score;
-  } else {
-    players.push({ name, score });
-  }
+  stats[username] = { wins, losses, level };
+  fs.writeFileSync(STATS_FILE_PATH, JSON.stringify(stats, null, 2));
 
-  fs.writeFileSync(DATA_FILE, JSON.stringify(players, null, 2));
   res.json({ success: true });
 });
 
-// Получаем всех игроков
-app.get('/api/players', (req, res) => {
-  const data = fs.readFileSync(DATA_FILE);
-  res.send(data);
-});
-
+// Запуск сервера
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Сервер запущен на порту ${PORT}`);
 });
