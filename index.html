@@ -1,17 +1,1252 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Офлайн Игра</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Танки</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #333;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+        }
+
+        #uiContainer {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        #eventMessage {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+        }
+
+            #eventMessage.show {
+                opacity: 1;
+            }
+
+        #botCounter {
+            background: rgba(100, 200, 50, 0.1);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+
+        #restartButton {
+            background: rgba(76, 175, 80, 0.2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            cursor: pointer;
+            pointer-events: auto;
+            display: block;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+            #restartButton:hover {
+                background: rgba(76, 175, 80, 0.7);
+            }
+
+        #playerStats {
+            position: fixed; /* Фиксируем позицию относительно экрана */
+            bottom: 10px; /* Отступ от нижнего края */
+            left: 50%; /* Центрируем по горизонтали */
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.3);
+            color: #0ff;
+            padding: 7px 13px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            pointer-events: none;
+            white-space: pre-line; /* Разрешаем перенос строк */
+            z-index: 20; /* Поверх других элементов */
+        }
+        #botInfo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    width: 150px;
+    max-height: 90vh;
+    overflow-y: auto;
+    z-index: 100;
+    text-align: left;
+}
+
+#botInfo h2 {
+    margin-top: 0;
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+#botInfo ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+#botInfo li {
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.hidden {
+    display: none;
+}
+    </style>
 </head>
 <body>
-  <h1>Игра "Кликер"</h1>
-  <p>Счёт: <span id="score">0</span></p>
-  <button onclick="increaseScore()">+1 очко</button>
-  <button onclick="submitScore()">Отправить результат</button>
+    <div id="botInfo" class="hidden">
+    <h2>Типы врагов:</h2>
+    <ul id="botInfoList"></ul>
+</div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="uiContainer">
+        <div id="eventMessage"></div>
+        <div id="botCounter"></div>
+        <button id="restartButton">Рестарт</button>
+        <div id="playerStats"></div>
 
-  <input type="text" id="playerName" placeholder="Ваше имя" />
+    </div>
 
-  <script src="game.js"></script>
+    <script>
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        document.addEventListener('click', resumeAudio, { once: true });
+        document.addEventListener('keydown', resumeAudio, { once: true });
+        document.addEventListener('touchstart', resumeAudio, { once: true });
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const botCounter = document.getElementById('botCounter');
+        const restartButton = document.getElementById('restartButton');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        let gameActive = true;
+
+        // Плотность ботов и лимит
+        const BOT_DENSITY = 1 / 50000;
+        const BOT_MAX = 50;
+        const area = canvas.width * canvas.height;
+        const maxBots = Math.min(BOT_MAX, Math.floor(area * BOT_DENSITY));
+
+        // Конфиги ботов
+       const BOT_TYPES = [
+    {
+        name: "Красный Молния",
+        speed: 3.8,
+        reloadTime: 30,
+        damage: 2,
+        visionRange: 400,
+        color: "#FF0000", // 🔴 Красный
+        health: 2
+    },
+    {
+        name: "Оранжевый Берсерк",
+        speed: 2.2,
+        reloadTime: 20,
+        damage: 5,
+        visionRange: 200,
+        color: "#FFA500", // 🟠 Оранжевый
+        health: 3
+    },
+    {
+        name: "Жёлтый Страж",
+        speed: 1.2,
+        reloadTime: 50,
+        damage: 3,
+        visionRange: 250,
+        color: "#FFFF00", // 🟡 Жёлтый
+        health: 5
+    },
+    {
+        name: "Зелёный Снайпер",
+        speed: 1.0,
+        reloadTime: 70,
+        damage: 4,
+        visionRange: 600,
+        color: "#00FF00", // 🟢 Зелёный
+        health: 2
+    },
+    {
+        name: "Голубой Разведчик",
+        speed: 3.5,
+        reloadTime: 40,
+        damage: 1,
+        visionRange: 500,
+        color: "#00BFFF", // 🔵 Голубой
+        health: 2
+    },
+    {
+        name: "Синий Охотник",
+        speed: 2.5,
+        reloadTime: 25,
+        damage: 3,
+        visionRange: 350,
+        color: "#0000FF", // 🔵 Синий
+        health: 4
+    },
+    {
+        name: "Фиолетовый Фантом",
+        speed: 3.0,
+        reloadTime: 35,
+        damage: 2,
+        visionRange: 450,
+        color: "#8A2BE2", // 💜 Фиолетовый
+        health: 3
+    },
+    {
+        name: "Тёмно-Красный Громила",
+        speed: 1.0,
+        reloadTime: 40,
+        damage: 5,
+        visionRange: 200,
+        color: "#8B0000", // Темно-красный
+        health: 5
+    },
+    {
+        name: "Серебряный Лазерник",
+        speed: 2.0,
+        reloadTime: 15,
+        damage: 1,
+        visionRange: 300,
+        color: "#C0C0C0", // Серебряный
+        health: 2
+    },
+    {
+        name: "Бронзовый Коммандос",
+        speed: 3.2,
+        reloadTime: 20,
+        damage: 4,
+        visionRange: 350,
+        color: "#CD7F32", // Бронзовый
+        health: 4
+    }
+];
+
+        // Конфиги предметов
+        const ITEM_TYPES = [
+            { type: 'speed', color: '#0ff', apply: p => p.speed += 1 },
+            { type: 'fireRate', color: '#f0f', apply: p => p.reloadTime = Math.max(5, p.reloadTime - 10) },
+            { type: 'damage', color: '#ff0', apply: p => p.damage += 1 },
+            { type: 'regen', color: '#0f0', apply: p => p.health = Math.min(5, p.health + 2) }
+        ];
+        const ITEM_SPAWN_CHANCE = 0.7;
+
+        // Эффект столкновения
+        class Effect {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.life = 30; this.maxLife = 30;
+            }
+            update() { this.life--; }
+            draw() {
+                const t = 1 - this.life / this.maxLife;
+                const radius = 5 + t * 50;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = `rgba(255,255,255,${1 - t})`;
+                ctx.fill();
+                ctx.strokeStyle = `rgba(255,255,255,${0.8 - t * 0.8})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            isAlive() { return this.life > 0; }
+        }
+
+        class Bullet {
+            constructor(x, y, angle, owner, damage = 1) {
+                this.x = x; this.y = y; this.speed = 5; this.angle = angle;
+                this.size = 5; this.owner = owner; this.damage = damage;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ff0'; ctx.fill();
+            }
+            update() {
+                this.x += Math.sin(this.angle) * this.speed;
+                this.y -= Math.cos(this.angle) * this.speed;
+            }
+            isOut() {
+                return this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height;
+            }
+        }
+
+        class Tank {
+            constructor(x, y, cfg, isPlayer = false) {
+                this.x = x;
+                this.y = y;
+                this.size = 30;
+                this.dir = 0;
+                this.color = cfg.color;
+                this.speed = cfg.speed;
+                this.reloadTime = cfg.reloadTime;
+                this.damage = cfg.damage;
+                this.visionRange = cfg.visionRange;
+                this.bullets = [];
+                this.reload = 0;
+                this.isPlayer = isPlayer;
+                this.health = 5;
+                this.visionTimeout = 0;
+                this.canSee = false;
+                this.health = cfg.health || 5;
+                this._pulseTime = 0; // Для пульсации
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.dir * Math.PI / 2);
+
+                if (this.isPlayer) {
+                    this._pulseTime += 0.05;
+                    if (this._pulseTime > 2 * Math.PI) this._pulseTime -= 2 * Math.PI;
+                    const pulse = 0.5 + 0.5 * Math.sin(this._pulseTime);
+
+                    // Пульсируемый размер гусениц и ствола (±10%)
+                    const trackScale = 1 + 0.1 * pulse;
+                    const barrelScale = 1 + 0.1 * pulse;
+
+                    // Пульсирующие гусеницы (тёмный синий с изменением прозрачности)
+                    ctx.fillStyle = `rgba(20, 50, 100, ${0.6 + 0.4 * pulse})`;
+                    ctx.fillRect(
+                        (-this.size / 2 - 4) * trackScale,
+                        -this.size / 2,
+                        8 * trackScale,
+                        this.size
+                    );
+                    ctx.fillRect(
+                        (this.size / 2 - 4) * trackScale,
+                        -this.size / 2,
+                        8 * trackScale,
+                        this.size
+                    );
+
+                    // Корпус без пульсации
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size - 8, this.size - 8);
+                   
+                    // Башня (без пульсации, обычный цвет)
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size / 4, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#468';
+                    ctx.fill();
+
+                    // Пульсирующий ствол (тёмный синий)
+                    ctx.fillStyle = `rgba(20, 50, 100, ${0.6 + 0.4 * pulse})`;
+                    ctx.fillRect(-3, (-this.size / 2 - 10) * barrelScale, 6, 20 * barrelScale);
+
+                } else {
+                    // Гусеницы без пульсации
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-this.size / 2 - 4, -this.size / 2, 8, this.size);
+                    ctx.fillRect(this.size / 2 - 4, -this.size / 2, 8, this.size);
+
+                    // Корпус
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size - 8, this.size - 8);
+
+                    // Башня
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size / 4, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#555';
+                    ctx.fill();
+
+                    // Ствол
+                    ctx.fillStyle = '#444';
+                    ctx.fillRect(-3, -this.size / 2 - 10, 6, 20);
+                }
+
+                ctx.restore();
+                if (this.health <0) this.health = 0;
+                // Полоска здоровья
+                // Фоновая линия (едва заметная)
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.2)';
+                ctx.fillRect(this.x - this.size/2, this.y - this.size/2 - 12, this.size, 2);
+
+                // Основное здоровье (тонкая линия)
+                ctx.fillStyle = 'rgba(200, 255, 200, 0.7)';
+                ctx.fillRect(this.x - this.size/2, this.y - this.size/2 - 12, this.size * (this.health/5), 2);
+
+                // Обновление пуль
+                this.bullets.forEach(b => b.draw());
+
+                // Отрисовка зоны видимости бота
+                if (!this.isPlayer) {
+                    const centerAng = this.dir * Math.PI / 2;
+                    const halfFOV = 0.3;
+                    const startAng = centerAng - halfFOV;
+                    const endAng = centerAng + halfFOV;
+
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(
+                        this.x + Math.sin(startAng) * this.visionRange,
+                        this.y - Math.cos(startAng) * this.visionRange
+                    );
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(
+                        this.x + Math.sin(endAng) * this.visionRange,
+                        this.y - Math.cos(endAng) * this.visionRange
+                    );
+
+                    ctx.strokeStyle = 'rgba(200,200,0,0.3)';
+                    ctx.lineWidth = 0.3;
+                    ctx.stroke();
+                }
+
+                // Обработка столкновений
+                resolveCollision(this);
+            }
+
+            move(dx, dy) {
+                const nx = this.x + dx * this.speed;
+                const ny = this.y + dy * this.speed;
+
+                if (!isCollidingWithObstacle(nx, ny, this.size)) {
+                    this.x = Math.max(this.size / 2, Math.min(canvas.width - this.size / 2, nx));
+                    this.y = Math.max(this.size / 2, Math.min(canvas.height - this.size / 2, ny));
+                }
+            }
+
+            rotate(d) {
+                this.dir = d;
+            }
+
+            shoot() {
+                if (this.reload <= 0) {
+                    const ang = this.dir * Math.PI / 2;
+                    const bx = this.x + Math.sin(ang) * (this.size / 2 + 10);
+                    const by = this.y - Math.cos(ang) * (this.size / 2 + 10);
+                    this.bullets.push(new Bullet(bx, by, ang, this, this.damage));
+                    this.reload = this.reloadTime;
+
+                    if (this.isPlayer) playShootSound();
+                }
+            }
+
+            update() {
+                if (this.reload > 0) this.reload--;
+                if (this.visionTimeout > 0) this.visionTimeout--;
+                this.bullets.forEach(b => b.update());
+                this.bullets = this.bullets.filter(b => !b.isOut());
+            }
+        }
+
+
+        class Item {
+            constructor(x, y, cfg) {
+                this.x = x; this.y = y; this.size = 15;
+                this.type = cfg.type; this.color = cfg.color; this.apply = cfg.apply;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, 2 * Math.PI);
+                ctx.fillStyle = this.color; ctx.fill();
+                ctx.fillStyle = '#000'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
+                ctx.fillText(this.type, this.x, this.y + 4);
+            }
+            collect(p) { this.apply(p); }
+        }
+
+        const player = new Tank(canvas.width / 2, canvas.height / 2,
+            { speed: 2, reloadTime: 30, damage: 1, visionRange: 300, color: '#FFFFFF' }, true);
+
+        const bots = [], items = [], effects = [];
+
+       for (let i = 0; i < maxBots; i++) {
+    const cfg = BOT_TYPES[Math.floor(Math.random() * BOT_TYPES.length)];
+    bots.push(new Tank(
+        Math.random() * canvas.width,
+        Math.random() * canvas.height,
+        cfg
+    ));
+    }
+
+        function resumeAudio() {
+        if (audioCtx.state !== 'running') {
+        audioCtx.resume();
+        }
+        }
+
+         function showMessage(message) {
+            const eventMessage = document.getElementById('eventMessage');
+            eventMessage.textContent = message;
+            eventMessage.classList.add('show');
+            updatePlayerStats();
+           
+            setTimeout(() => {
+                eventMessage.classList.remove('show');
+            }, 3000);
+        }
+
+        function updatePlayerStats() {
+            const stats = document.getElementById('playerStats');
+            stats.innerHTML = `
+        🚗 Скорость: ${player.speed}
+        🔁 Перезарядка: ${player.reloadTime}
+        💥 Урон: ${player.damage}
+        ❤️ Жизни: ${player.health}
+      `;
+        }
+
+        function showBotInfo() {
+    const botInfo = document.getElementById('botInfo');
+    const botInfoList = document.getElementById('botInfoList');
+    botInfoList.innerHTML = ''; // Очистка
+
+    BOT_TYPES.forEach(bot => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <strong style="color:${bot.color}">${bot.name}</strong><br>
+            &nbsp;&nbsp;Скорость: ${bot.speed}<br>
+            &nbsp;&nbsp;Прочность: ${bot.health}<br>
+            &nbsp;&nbsp;Урон: ${bot.damage}<br>
+            &nbsp;&nbsp;Диапазон: ${bot.visionRange}<br>
+            &nbsp;&nbsp;Перезарядка: ${bot.reloadTime}
+        `;
+        botInfoList.appendChild(li);
+    });
+
+    botInfo.classList.remove('hidden');
+}
+
+        function resolveCollision(tank) {
+            obstacles.forEach(o => {
+                if (isCollidingWithObstacle(tank.x, tank.y, tank.size)) {
+                    // Простейшая коррекция: двигаем танк в случайном направлении
+                    let dx = (Math.random() - 0.5) * 10;
+                    let dy = (Math.random() - 0.5) * 10;
+                    tank.x += dx;
+                    tank.y += dy;
+                }
+            });
+        }
+
+        function botAI(bot) {
+            const dx = player.x - bot.x;
+            const dy = player.y - bot.y;
+            const dist = Math.hypot(dx, dy);
+            const angTo = Math.atan2(dx, -dy);
+            const botAng = bot.dir * Math.PI / 2;
+
+            const inSight =
+                Math.abs(botAng - angTo) < 0.3
+                && dist < bot.visionRange
+                && !isCollidingWithObstacle(
+                    (bot.x + player.x) / 2,
+                    (bot.y + player.y) / 2,
+                    10
+                );
+
+            // Сохраняем в боте
+            bot.canSee = inSight;
+            // где-то в начале botAI(bot) или в Tank.update():
+            if (bot.visionTimeout > 0) {
+                bot.visionTimeout--;
+                if (bot.visionTimeout === 0) {
+                    bot.visionRange = bot._baseVisionRange;
+                    bot.canSee = false;
+                }
+            }
+            if (inSight) {
+                bot.move(Math.round(Math.sin(botAng)), -Math.round(Math.cos(botAng)));
+                bot.shoot();
+            } else {
+                // существующая логика «бродилки»
+                if (!bot.aiTime || bot.aiTime <= 0) {
+                    bot.aiDir = Math.floor(Math.random() * 4);
+                    bot.aiTime = 50 + Math.random() * 100;
+                }
+                bot.move([0, 1, 0, -1][bot.aiDir], [-1, 0, 1, 0][bot.aiDir]);
+                bot.rotate(bot.aiDir);
+                bot.aiTime--;
+            }
+        }
+
+        function playMoveSound() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            // Основной низкочастотный гул
+            osc.type = 'sawtooth';
+            osc.frequency.value = 60; // Снижена частота для мягкости
+
+            // Фильтр для подавления высоких частот
+            filter.type = 'lowpass';
+            filter.frequency.value = 300;
+
+            // Плавная атака и затухание
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+
+            // Соединяем цепочку
+            osc.connect(filter).connect(gain).connect(audioCtx.destination);
+
+            // Запуск
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        // Звук выстрела (короткий мощный)
+        function playShootSound() {
+            const duration = 0.08;
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+            // Басовая компонента
+            const bassOsc = audioCtx.createOscillator();
+            bassOsc.type = 'triangle';
+            bassOsc.frequency.value = 120;
+            bassOsc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + duration);
+
+            // Шумовой компонент
+            const bufferSize = audioCtx.sampleRate * duration;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+
+            // Фильтр шума
+            const noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'highshelf';
+            noiseFilter.frequency.value = 1000;
+            noiseFilter.gain.value = 6;
+
+            // Соединяем цепочку
+            bassOsc.connect(masterGain).connect(audioCtx.destination);
+            noise.connect(noiseFilter).connect(masterGain);
+
+            // Запускаем
+            bassOsc.start();
+            noise.start();
+            bassOsc.stop(audioCtx.currentTime + duration);
+            noise.stop(audioCtx.currentTime + duration);
+        }
+
+        function playHitSound1() {
+            const duration = 1.2;
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(2.0, audioCtx.currentTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+            // Басовый удар (модель вибрации металла)
+            const bass = audioCtx.createOscillator();
+            bass.type = 'triangle';
+            bass.frequency.setValueAtTime(60, audioCtx.currentTime);
+            bass.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + duration * 0.7);
+
+            // Шумовой спектр (детонация)
+            const bufferSize = audioCtx.sampleRate * duration;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const noiseData = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                noiseData[i] = Math.pow(Math.random(), 2) * (Math.random() > 0.5 ? 1 : -1);
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+
+            // Фильтр с движением форманта
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(400, audioCtx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + duration * 0.5);
+            filter.Q.setValueAtTime(4, audioCtx.currentTime);
+
+            // Реверберация с задержкой (эффект масштаба)
+            const delay = audioCtx.createDelay(2);
+            delay.delayTime.setValueAtTime(0.1, audioCtx.currentTime);
+
+            const feedback = audioCtx.createGain();
+            feedback.gain.setValueAtTime(0.6, audioCtx.currentTime);
+
+            // Соединение
+            bass.connect(filter);
+            noise.connect(filter);
+
+            filter.connect(delay);
+            delay.connect(feedback).connect(filter);
+
+            filter.connect(masterGain).connect(audioCtx.destination);
+
+            // Запуск
+            bass.start();
+            noise.start();
+            bass.stop(audioCtx.currentTime + duration * 0.8);
+            noise.stop(audioCtx.currentTime + duration * 0.5);
+        }
+
+        function playHitSound2() {
+            const duration = 1.5;
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(3.0, audioCtx.currentTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.1, audioCtx.currentTime + 0.2);
+            masterGain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+            // Множество гармоник с детюнингом
+            const harmonics = [1, 1.6, 2.1, 2.8, 3.3];
+            harmonics.forEach((ratio, i) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(70 * ratio, audioCtx.currentTime);
+
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.3 / (i + 1), audioCtx.currentTime);
+
+                osc.connect(gain).connect(masterGain);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration * (1 - i / 10));
+            });
+
+            // Ударный шумовой слой
+            const bufferSize = audioCtx.sampleRate * duration;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const noiseData = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                noiseData[i] = Math.pow(Math.random(), 3) * (Math.random() > 0.5 ? 1 : -1);
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+            noise.connect(noiseGain).connect(masterGain);
+
+            // Подключение
+            noise.start();
+            noise.stop(audioCtx.currentTime + duration * 0.4);
+
+            // Компрессия
+            const compressor = audioCtx.createDynamicsCompressor();
+            compressor.threshold.setValueAtTime(-20, audioCtx.currentTime);
+            compressor.ratio.setValueAtTime(20, audioCtx.currentTime);
+            compressor.attack.setValueAtTime(0.001, audioCtx.currentTime);
+            compressor.release.setValueAtTime(0.2, audioCtx.currentTime);
+
+            // Финальное подключение
+            masterGain.connect(compressor).connect(audioCtx.destination);
+        }
+
+        function playExplosionSound() {
+            const duration = 1.5;
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(2.5, audioCtx.currentTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+            // Создаём шумовой буфер
+            const bufferSize = audioCtx.sampleRate * duration;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const noiseData = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                noiseData[i] = Math.pow(Math.random(), 3) * (Math.random() > 0.5 ? 1 : -1);
+            }
+
+            // Запускаем несколько гранул
+            const granulesCount = 15;
+            for (let i = 0; i < granulesCount; i++) {
+                const noiseSource = audioCtx.createBufferSource();
+                noiseSource.buffer = noiseBuffer;
+
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.setValueAtTime(0.3 * Math.random(), audioCtx.currentTime);
+
+                const delayTime = Math.random() * 0.3;
+                noiseSource.start(audioCtx.currentTime + delayTime);
+                noiseSource.stop(audioCtx.currentTime + delayTime + duration * 0.4);
+
+                noiseSource.connect(gainNode).connect(masterGain);
+            }
+
+            // Басовый компонент
+            const bass = audioCtx.createOscillator();
+            bass.type = 'sine';
+            bass.frequency.setValueAtTime(25, audioCtx.currentTime);
+            bass.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + duration * 0.6);
+            bass.connect(masterGain);
+            bass.start();
+            bass.stop(audioCtx.currentTime + duration * 0.7);
+
+            // Фильтр с движением
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1200, audioCtx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + duration);
+
+            // Подключение
+            masterGain.connect(filter).connect(audioCtx.destination);
+        }
+
+        function playExplosionSound2() {
+            const duration = 1.0;
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(2.0, audioCtx.currentTime);
+            masterGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+            // Создаём кривую дисторшна
+            const distortion = audioCtx.createWaveShaper();
+            function makeDistortionCurve(amount) {
+                const n_samples = 44100;
+                const curve = new Float32Array(n_samples);
+                for (let i = 0; i < n_samples; i++) {
+                    const x = i * 2 / n_samples - 1;
+                    curve[i] = (Math.PI + amount) * x / (Math.PI + amount * Math.abs(x));
+                }
+                return curve;
+            }
+            distortion.curve = makeDistortionCurve(100); // Максимальный дисторшн
+
+            // Основной сигнал (пилообразная волна)
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + duration * 0.7);
+
+            // Шумовой слой
+            const bufferSize = audioCtx.sampleRate * duration;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const noiseData = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                noiseData[i] = Math.pow(Math.random(), 2) * (Math.random() > 0.5 ? 1 : -1);
+            }
+            const noise = audioCtx.createBufferSource();
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            noise.buffer = noiseBuffer;
+            noise.connect(noiseGain).connect(distortion);
+
+            // Фильтр с резонансом
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'peaking';
+            filter.frequency.setValueAtTime(600, audioCtx.currentTime);
+            filter.Q.setValueAtTime(8, audioCtx.currentTime);
+            filter.gain.setValueAtTime(15, audioCtx.currentTime);
+
+            // Соединение
+            osc.connect(distortion).connect(filter).connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            // Запуск
+            osc.start();
+            noise.start();
+            osc.stop(audioCtx.currentTime + duration * 0.8);
+            noise.stop(audioCtx.currentTime + duration * 0.5);
+        }
+
+        function checkCollisions() {
+            const all = [player, ...bots];
+
+            // 1) Пули vs препятствия
+            all.forEach(tank => {
+                for (let i = tank.bullets.length - 1; i >= 0; i--) {
+                    const b = tank.bullets[i];
+                    if (isCollidingWithObstacle(b.x, b.y, b.size, true)) {
+                        effects.push(new Effect(b.x, b.y)); playHitSound1();
+                        tank.bullets.splice(i, 1);
+                    }
+                }
+            });
+
+            // 2) Пули vs предметы и танки
+            all.forEach(tank => {
+                for (let i = tank.bullets.length - 1; i >= 0; i--) {
+                    const b = tank.bullets[i];
+                    let hit = false;
+
+                    // 2.1) по предмету
+                    for (let j = 0; j < items.length; j++) {
+                        const it = items[j];
+                        const dist = Math.hypot(b.x - it.x, b.y - it.y);
+                        if (dist < b.size + it.size) {
+                            effects.push(new Effect(it.x, it.y));
+                            tank.bullets.splice(i, 1);
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (hit) continue;
+
+                    // 2.2) по танку
+                    for (let tgt of all) {
+                        if (b.owner && tgt !== b.owner && tgt.isPlayer !== b.owner.isPlayer) {
+                            const distT = Math.hypot(b.x - tgt.x, b.y - tgt.y);
+                            if (distT < tgt.size / 2) {
+                                effects.push(new Effect(tgt.x, tgt.y)); playHitSound2();
+                                // наносим урон
+                                tgt.health -= b.damage;
+                                if (tgt.isPlayer) showMessage(`Получен Урон ${b.damage}`); else showMessage(`Нанесен Урон ${b.damage}`);
+                                // удаляем пулю
+                                tank.bullets.splice(i, 1);
+
+                                // === НОВЫЙ БЛОК: перенаправление взгляда бота на игрока ===
+                                if (!tgt.isPlayer) {
+                                    // 1) вычисляем угол на игрока
+                                    const dx = player.x - tgt.x;
+                                    const dy = player.y - tgt.y;
+                                    const angToPlayer = Math.atan2(dx, -dy);
+
+                                    // 2) дискретизируем в dir (0,1,2,3)
+                                    let newDir = Math.round(angToPlayer / (Math.PI / 2));
+                                    newDir = (newDir % 4 + 4) % 4;
+                                    tgt.dir = newDir;
+
+                                    // 3) включаем флаг видимости
+                                    tgt.canSee = true;
+                                    // 4) ставим максимальный радиус из всех типов
+                                    const maxVR = Math.max(...BOT_TYPES.map(t => t.visionRange));
+                                    tgt.visionRange = maxVR;
+
+                                    // 5) задаём таймаут для сброса (60 кадров ≈1 секунда при 60FPS)
+                                    tgt.visionTimeout = 60;
+                                }
+                                // === КОНЕЦ НОВОГО БЛОКА ===
+
+                                // спавн предмета при смерти бота
+                                if (!tgt.isPlayer && tgt.health <= 0 && Math.random() < ITEM_SPAWN_CHANCE) {
+                                    const cfg = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+                                    items.push(new Item(tgt.x, tgt.y, cfg));
+                                    playExplosionSound2();
+                                    showMessage("Выпал предмет");
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 3) Удаление мёртвых ботов
+            for (let i = bots.length - 1; i >= 0; i--) {
+                if (bots[i].health <= 0) { bots.splice(i, 1); showMessage(`Взорван вражеский ТАНК`);console.log("Взорван вражеский ТАНК"); playExplosionSound2(); }
+            }
+            // 4) Сбор предметов игроком
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                if (Math.hypot(it.x - player.x, it.y - player.y) < (it.size + player.size) / 2) {
+                    it.collect(player);
+                    showMessage(`Получено: ${it.type}`);
+                    items.splice(i, 1);
+                }
+            }
+            // 5) Обновление эффектов
+            for (let i = effects.length - 1; i >= 0; i--) {
+                effects[i].update();
+                if (!effects[i].isAlive()) effects.splice(i, 1);
+            }
+
+            botCounter.textContent = `Ботов осталось: ${bots.length}`;
+            if (player.health <= 0) endGame(false);
+            else if (bots.length === 0) endGame(true);
+        }
+
+
+        function endGame(win) {
+    gameActive = false;
+    playExplosionSound();
+    restartButton.style.display = 'block';
+    botCounter.textContent = win ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ!';
+    botCounter.style.background = win ? 'rgba(0,100,0,0.8)' : 'rgba(150,0,0,0.8)';
+    console.log("endGame")
+    // Показываем описание ботов
+    showBotInfo();
+}
+
+        function generateMap() {
+            showMessage(`Убейте всех врагов`);
+            console.log("generateMap")
+            // Минимальный и максимальный размер препятствия
+            const _minObs = 30;
+            const _maxObs = 80;
+
+            // Вычисляем число ячеек по ширине и высоте,
+            // чтобы каждая ячейка была не меньше maxObs + запаса 10px:
+            const _cellMin = _maxObs + 10;
+            const _cols = Math.max(4, Math.floor(canvas.width / _cellMin));
+            const _rows = Math.max(4, Math.floor(canvas.height / _cellMin));
+
+            // Реальные размеры ячеек
+            const _cellW = canvas.width / _cols;
+            const _cellH = canvas.height / _rows;
+
+            // Вероятность спавна в одной ячейке
+            const _spawnProb = 0.2;
+
+            const _mapObstacles = [];
+
+            for (let i = 0; i < _cols; i++) {
+                for (let j = 0; j < _rows; j++) {
+                    if (Math.random() < _spawnProb) {
+                        // Размер препятствия — от _minObs до максимально возможного внутри ячейки
+                        const _w = _minObs + Math.random() * (Math.max(_minObs, _cellW - 10) - _minObs);
+                        const _h = _minObs + Math.random() * (Math.max(_minObs, _cellH - 10) - _minObs);
+
+                        // Позиция — рандомно внутри ячейки, чтобы целиком вписалось
+                        const _x = i * _cellW + Math.random() * (_cellW - _w);
+                        const _y = j * _cellH + Math.random() * (_cellH - _h);
+
+                        // Случайный тип
+                        const _types = ['stone', 'brick', 'water'];
+                        const _type = _types[Math.floor(Math.random() * _types.length)];
+
+                        const _obs = { x: _x, y: _y, w: _w, h: _h, type: _type };
+                        if (_type === 'brick') _obs.health = 3;
+
+                        _mapObstacles.push(_obs);
+                    }
+                }
+            }
+
+            return _mapObstacles;
+        }
+
+        // === 2) Заменяем статический массив на результат генерации ===
+        const obstacles = generateMap();
+    
+        // За пределами функции drawObstacles
+const gradients = {
+    stone: ctx.createLinearGradient(0, 0, 100, 100),
+    brick: ctx.createLinearGradient(0, 0, 100, 100),
+    water: ctx.createLinearGradient(0, 0, 0, 100)
+};
+
+gradients.stone.addColorStop(0, '#777');
+gradients.stone.addColorStop(1, '#444');
+
+gradients.brick.addColorStop(0, '#b22');
+gradients.brick.addColorStop(1, '#c33');
+
+gradients.water.addColorStop(0, '#33f');
+gradients.water.addColorStop(1, '#66f');
+
+function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+}
+
+// Создайте канвас с одним кирпичом
+const brickCanvas = document.createElement('canvas');
+brickCanvas.width = 20;
+brickCanvas.height = 10;
+const brickCtx = brickCanvas.getContext('2d');
+
+// Нарисуйте кирпич на этом канвасе
+brickCtx.fillStyle = '#b22';
+brickCtx.fillRect(0, 0, 20, 10);
+brickCtx.fillStyle = '#511';
+brickCtx.fillRect(1, 2, 18, 1);
+
+// Создайте паттерн
+const brickPattern = ctx.createPattern(brickCanvas, 'repeat');
+
+
+    
+      function drawObstacles() {
+    obstacles.forEach(o => {
+        ctx.save();
+        ctx.translate(o.x, o.y);
+        
+        // Тени для всех объектов
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
+        if (o.type === 'stone') {
+            // Используем кэшированный градиент
+            ctx.fillStyle = gradients.stone;
+            drawRoundedRect(0, 0, o.w, o.h, 8);
+            ctx.fill();
+            
+            // Контур камня
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+        else if (o.type === 'brick') {
+            // Используем паттерн
+            ctx.fillStyle = brickPattern;
+            drawRoundedRect(0, 0, o.w, o.h, 5);
+            ctx.fill();
+            
+            // Обводка краев
+            ctx.strokeStyle = '#411';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Индикатор прочности
+            if (o.health !== undefined) {
+                ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                ctx.fillRect(0, 0, o.w * (1 - o.health/3), 4);
+            }
+        }
+        else if (o.type === 'water') {
+            // Используем кэшированный градиент
+            ctx.fillStyle = gradients.water;
+            drawRoundedRect(0, 0, o.w, o.h, 8);
+            ctx.fill();
+            
+            
+            
+            // Обводка краев
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        ctx.restore();
+    });
+}
+        function isCollidingWithObstacle(x, y, size, isBullet = false) {
+            return obstacles.some(o => {
+                const inX = x + size / 2 > o.x && x - size / 2 < o.x + o.w;
+                const inY = y + size / 2 > o.y && y - size / 2 < o.y + o.h;
+                if (inX && inY) {
+                    if (isBullet && o.type === 'brick') {
+                        o.health--;
+                        if (o.health <= 0) obstacles.splice(obstacles.indexOf(o), 1);
+                        return true;
+                    }
+                    return o.type !== 'water' || !isBullet;
+                }
+                return false;
+            });
+        }
+
+        let lastKey = null;
+        window.addEventListener('keydown', e => lastKey = e.key);
+        window.addEventListener('keyup', e => { if (e.key === lastKey) lastKey = null; });
+
+        function handleInput() {
+
+            if (lastKey === 'ArrowUp' || lastKey === 'w' || lastKey === 'W') {
+                player.rotate(0); player.move(0, -1); playMoveSound();
+            }
+            else if (lastKey === 'ArrowRight' || lastKey === 'd' || lastKey === 'D') {
+                player.rotate(1); player.move(1, 0); playMoveSound();
+            }
+            else if (lastKey === 'ArrowDown' || lastKey === 's' || lastKey === 'S') {
+                player.rotate(2); player.move(0, 1); playMoveSound();
+            }
+            else if (lastKey === 'ArrowLeft' || lastKey === 'a' || lastKey === 'A') {
+                player.rotate(3); player.move(-1, 0); playMoveSound();
+            }
+            else if (lastKey === ' ') {
+                player.shoot();
+            }
+        }
+
+       function update() {
+    if (lastKey === 'r' || lastKey === 'R') {
+        
+        location.reload();
+        return;
+    }
+
+    if (!gameActive) {
+        // Но всё равно запускаем следующий кадр
+        requestAnimationFrame(update);
+        
+        return;
+    }
+   
+    handleInput();
+    player.update();
+    bots.forEach(b => { botAI(b); b.update(); });
+    checkCollisions();
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawObstacles();
+    player.draw();
+    bots.forEach(b => b.draw());
+    items.forEach(it => it.draw());
+    effects.forEach(e => e.draw());
+
+    requestAnimationFrame(update);
+}
+
+        botCounter.textContent = `Ботов осталось: ${bots.length}`;
+        update();
+
+
+
+        // Touch-контролы
+        let touchStart = null, touchTime = 0;
+        canvas.addEventListener('touchstart', e => {
+            if (e.touches.length) { touchStart = e.touches[0]; touchTime = Date.now(); }
+        });
+        canvas.addEventListener('touchmove', e => {
+            if (!gameActive || !touchStart || !e.touches.length) return;
+            const t = e.touches[0], dx = t.clientX - touchStart.clientX, dy = t.clientY - touchStart.clientY;
+            if (Math.hypot(dx, dy) > 20) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    if (dx > 0) { player.rotate(1); player.move(1, 0); playMoveSound(); }
+                    else { player.rotate(3); player.move(-1, 0); playMoveSound(); }
+                } else {
+                    if (dy > 0) { player.rotate(2); player.move(0, 1); playMoveSound(); }
+                    else { player.rotate(0); player.move(0, -1); playMoveSound(); }
+                }
+            }
+        });
+        canvas.addEventListener('touchend', e => {
+            if (!gameActive) return;
+            if (Date.now() - touchTime < 200) player.shoot();
+            touchStart = null;
+        });
+
+
+
+        restartButton.addEventListener('click', () => location.reload());
+    </script>
 </body>
 </html>
