@@ -34,21 +34,21 @@ async function getAllStats() {
   }
 }
 
-async function createPlayerIfNotExists(username) {
+async function createPlayerIfNotExists(username, browserId) {
   const stats = await getAllStats();
-  if (!stats[username]) {
+  if (!stats[browserId]) {
     // Новый игрок — добавляем с нулевой статистикой
-    await updatePlayerStats(username, { wins: 0, losses: 0, level: 1 });
-    console.log(`Новый игрок добавлен: ${username}`);
+    await updatePlayerStats(browserId, { name: username, wins: 0, losses: 0, level: 1 });
+    console.log(`Новый игрок добавлен: ${username} (${browserId})`);
   }
 }
 
-async function updatePlayerStats(username, stats) {
+async function updatePlayerStats(id, stats) {
   try {
     await fetch("/api/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, ...stats }),
+      body: JSON.stringify({ id, ...stats }),
     });
   } catch (err) {
     console.error("Ошибка сохранения статистики:", err);
@@ -61,13 +61,14 @@ function showInputForm(browserId) {
     <input type="text" id="username" placeholder="Ваше имя (необязательно)" />
     <button onclick="setName('${browserId}')">Продолжить</button>
     <p style="font-size: 0.75rem; text-align: center; margin-top: 0.5rem;">
-      Если вы не введете имя, будет использован уникальный ID: <strong>${browserId}</strong>
+      Если вы не введете имя, будет использовано: <strong>Гость</strong>
     </p>
   `;
 }
 
-async function showGameMenu(username) {
-  const stats = await getPlayerStats(username);
+async function showGameMenu(username, browserId) {
+  const allStats = await getAllStats();
+  const stats = allStats[browserId] || { name: username, wins: 0, losses: 0, level: 1 };
 
   app.innerHTML = `
     <div class="username-info">
@@ -79,8 +80,8 @@ async function showGameMenu(username) {
       </div>
     </div>
     <div class="games-grid">
-      <a href="/checkers.html?player=${encodeURIComponent(username)}" class="game-button block text-center">♟️ ШАШКИ</a>
-      <a href="/tanks.html?player=${encodeURIComponent(username)}" class="game-button block text-center">🛻 ТАНКИ</a>
+      <a href="/checkers.html?player=${encodeURIComponent(browserId)}" class="game-button block text-center">♟️ ШАШКИ</a>
+      <a href="/tanks.html?player=${encodeURIComponent(browserId)}" class="game-button block text-center">🛻 ТАНКИ</a>
     </div>
     <div class="games-grid">
       <button class="game-button" onclick="showStats()">📊 Статистика</button>
@@ -93,11 +94,11 @@ async function showStats() {
   const allStats = await getAllStats();
 
   let tableRows = "";
-  for (const user in allStats) {
-    const s = allStats[user];
+  for (const id in allStats) {
+    const s = allStats[id];
     tableRows += `
       <tr>
-        <td>${user}</td>
+        <td>${s.name || 'Гость'}</td>
         <td>${s.wins}</td>
         <td>${s.losses}</td>
         <td>${s.level}</td>
@@ -128,41 +129,43 @@ async function showStats() {
 
 function goBack() {
   const storedName = localStorage.getItem("username");
-  if (storedName) {
-    showGameMenu(storedName);
+  const browserId = localStorage.getItem("browserId");
+  if (storedName && browserId) {
+    showGameMenu(storedName, browserId);
   } else {
-    const browserId = generateBrowserId();
-    showInputForm(browserId);
+    const newBrowserId = generateBrowserId();
+    showInputForm(newBrowserId);
   }
 }
 
 function setName(browserId) {
   const input = document.getElementById("username");
   const value = input.value.trim();
-  const username = value || browserId;
-  localStorage.setItem("username", username);
-  location.reload();
-}
+  const username = value || "Гость";
 
-async function getPlayerStats(username) {
-  const allStats = await getAllStats();
-  return allStats[username] || { wins: 0, losses: 0, level: 1 };
+  localStorage.setItem("username", username);
+  localStorage.setItem("browserId", browserId);
+
+  location.reload();
 }
 
 function resetName() {
   localStorage.removeItem("username");
+  localStorage.removeItem("browserId");
   location.reload();
 }
 
 window.onload = async () => {
   const storedName = localStorage.getItem("username");
-  const browserId = generateBrowserId();
+  const storedBrowserId = localStorage.getItem("browserId");
+  const browserId = storedBrowserId || generateBrowserId();
 
-  if (storedName) {
-    await createPlayerIfNotExists(storedName);
-    showGameMenu(storedName);
+  if (storedName && browserId) {
+    await createPlayerIfNotExists(storedName, browserId);
+    showGameMenu(storedName, browserId);
   } else {
-    await createPlayerIfNotExists(browserId);
+    const defaultName = "Гость";
+    await createPlayerIfNotExists(defaultName, browserId);
     showInputForm(browserId);
   }
 };
