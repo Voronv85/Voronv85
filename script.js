@@ -37,12 +37,19 @@ async function getAllStats() {
 async function createPlayerIfNotExists(username, browserId) {
   const stats = await getAllStats();
   if (!stats[browserId]) {
-    await updatePlayerStats(browserId, { name: username, wins: 0, losses: 0, level: 1 });
+    await updatePlayerStats(browserId, {
+      name: username,
+      wins: 0,
+      losses: 0,
+      level: 1
+    });
     console.log(`Новый игрок добавлен: ${username} (${browserId})`);
   }
 }
 
 async function updatePlayerStats(id, stats) {
+  console.log("Отправка данных на сервер:", { id, ...stats });
+
   try {
     const response = await fetch("/api/update", {
       method: "POST",
@@ -51,12 +58,14 @@ async function updatePlayerStats(id, stats) {
     });
 
     if (!response.ok) {
-      throw new Error("Ошибка сети при сохранении статистики");
+      const errorText = await response.text();
+      throw new Error(`Ошибка сети: ${response.status} ${response.statusText}. ${errorText}`);
     }
 
-    console.log("Статистика успешно обновлена:", { id, ...stats });
+    const result = await response.json();
+    console.log("Статистика успешно обновлена:", result);
   } catch (err) {
-    console.error("Ошибка сохранения статистики:", err);
+    console.error("Ошибка сохранения статистики:", err.message);
   }
 }
 
