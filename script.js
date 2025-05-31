@@ -37,7 +37,6 @@ async function getAllStats() {
 async function createPlayerIfNotExists(username, browserId) {
   const stats = await getAllStats();
   if (!stats[browserId]) {
-    // Новый игрок — добавляем с нулевой статистикой
     await updatePlayerStats(browserId, { name: username, wins: 0, losses: 0, level: 1 });
     console.log(`Новый игрок добавлен: ${username} (${browserId})`);
   }
@@ -45,11 +44,17 @@ async function createPlayerIfNotExists(username, browserId) {
 
 async function updatePlayerStats(id, stats) {
   try {
-    await fetch("/api/update", {
+    const response = await fetch("/api/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...stats }),
     });
+
+    if (!response.ok) {
+      throw new Error("Ошибка сети при сохранении статистики");
+    }
+
+    console.log("Статистика успешно обновлена:", { id, ...stats });
   } catch (err) {
     console.error("Ошибка сохранения статистики:", err);
   }
@@ -129,9 +134,9 @@ async function showStats() {
 
 function goBack() {
   const storedName = localStorage.getItem("username");
-  const browserId = localStorage.getItem("browserId");
-  if (storedName && browserId) {
-    showGameMenu(storedName, browserId);
+  const storedBrowserId = localStorage.getItem("browserId");
+  if (storedName && storedBrowserId) {
+    showGameMenu(storedName, storedBrowserId);
   } else {
     const newBrowserId = generateBrowserId();
     showInputForm(newBrowserId);
