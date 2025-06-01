@@ -26,24 +26,36 @@ app.get('/api/user/:id', async (req, res) => {
 });
 
 app.get('/api/user/top', async (req, res) => {
-  console.log('Запрос глобальной статистики...'); // Логирование
-  
   try {
+    // Убираем .single() и работаем с массивом
     const { data, error } = await supabase
       .from('user_stats')
       .select('*')
       .order('wins', { ascending: false })
       .limit(10);
 
-    console.log('Результат запроса:', { data, error }); // Логирование
-
     if (error) {
       console.error('Supabase error:', error);
       return res.status(400).json({ 
         error: 'Database error',
-        details: error 
+        details: error.message 
       });
     }
+
+    if (!data || data.length === 0) {
+      return res.json([]); // Возвращаем пустой массив вместо ошибки
+    }
+
+    res.json(data);
+    
+  } catch (err) {
+    console.error('Server error:', err);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: err.message 
+    });
+  }
+});
 
     if (!data || data.length === 0) {
       return res.status(404).json({ 
