@@ -1,48 +1,61 @@
-require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Инициализация Supabase клиента
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
+// Middleware
 app.use(express.json());
+app.use(express.static('public'));
 
-// Маршрут для получения данных из таблицы
-app.get('/data', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('your_table_name')
-      .select('*');
-    
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// API Routes
+app.get('/api/data', async (req, res) => {
+  const { data, error } = await supabase
+    .from('app_data')
+    .select('*');
+  
+  if (error) return res.status(500).json({ error });
+  res.json(data);
 });
 
-// Маршрут для добавления данных
-app.post('/data', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('your_table_name')
-      .insert([req.body]);
-    
-    if (error) throw error;
-    res.status(201).json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.post('/api/data', async (req, res) => {
+  const { data, error } = await supabase
+    .from('app_data')
+    .insert([req.body]);
+  
+  if (error) return res.status(500).json({ error });
+  res.status(201).json(data);
 });
 
-// Корневой маршрут
+app.put('/api/data/:id', async (req, res) => {
+  const { data, error } = await supabase
+    .from('app_data')
+    .update(req.body)
+    .eq('id', req.params.id);
+  
+  if (error) return res.status(500).json({ error });
+  res.json(data);
+});
+
+app.delete('/api/data/:id', async (req, res) => {
+  const { data, error } = await supabase
+    .from('app_data')
+    .delete()
+    .eq('id', req.params.id);
+  
+  if (error) return res.status(500).json({ error });
+  res.json(data);
+});
+
+// Serve HTML
 app.get('/', (req, res) => {
-  res.send('Supabase + Render.com App is running!');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(port, () => {
