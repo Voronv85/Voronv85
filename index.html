@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Checkers Init</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
+  <h2 id="status">Загрузка...</h2>
+
+  <script>
+    // ✅ Инициализация Supabase клиента
+    const client = supabase.createClient(
+      'https://fdbpacbuunjfipsiplzr.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYnBhY2J1dW5qZmlwc2lwbHpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjA3MTAsImV4cCI6MjA2NDMzNjcxMH0.tSa-URjkTfInYezog_o76-tDcRshSuvC0axS-NKmYmw'
+    );
+
+    // ✅ Функция генерации UUID (если crypto.randomUUID не доступен)
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // ✅ Главная функция запуска
+    async function initUser() {
+      const status = document.getElementById('status');
+      status.textContent = 'Проверка данных в кэше...';
+
+      let id = localStorage.getItem('user_id');
+      let name = localStorage.getItem('user_name');
+      let wins = parseInt(localStorage.getItem('wins')) || 0;
+      let losses = parseInt(localStorage.getItem('losses')) || 0;
+
+      if (!id) {
+        status.textContent = 'Создание нового пользователя...';
+        id = generateUUID();
+        name = prompt('Введите ваше имя:');
+        if (!name) name = 'Без имени';
+
+        localStorage.setItem('user_id', id);
+        localStorage.setItem('user_name', name);
+        localStorage.setItem('wins', '0');
+        localStorage.setItem('losses', '0');
+      }
+
+      // ✅ Отправка данных в Supabase
+      try {
+        status.textContent = 'Сохраняем в базу...';
+        console.log('Отправка:', { id, name, wins, losses });
+
+        const { error } = await client.from('user_stats').upsert([
+          { id, name, wins, losses }
+        ]);
+
+        if (error) {
+          console.error('Ошибка Supabase:', error);
+          status.textContent = 'Ошибка базы: ' + error.message;
+          return;
+        }
+
+        status.textContent = 'Готово! Переход...';
+        setTimeout(() => {
+          window.location.href = 'start.html';
+        }, 1000);
+      } catch (e) {
+        console.error('Ошибка в initUser:', e);
+        status.textContent = 'Ошибка: ' + e.message;
+      }
+    }
+
+    // ⏳ Запуск
+    initUser();
+  </script>
+</body>
+</html>
