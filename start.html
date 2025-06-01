@@ -1,0 +1,20 @@
+<!-- start.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Добро пожаловать</title>
+</head>
+<body>
+  <h2>Привет, <span id="name"></span>!</h2>
+  <p>Побед: <span id="wins"></span></p>
+  <p>Поражений: <span id="losses"></span></p>
+  <button onclick="location.href='results.html'">Смотреть таблицу игроков</button>
+
+  <script>
+    document.getElementById('name').innerText = localStorage.getItem('user_name');
+    document.getElementById('wins').innerText = localStorage.getItem('wins');
+    document.getElementById('losses').innerText = localStorage.getItem('losses');
+  </script>
+</body>
+</html>
