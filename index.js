@@ -12,17 +12,19 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Раздаём статические файлы из public как корень сайта
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Роут для главной страницы — на случай, если нужно сделать редирект или обработку
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Инициализация Supabase
 const supabaseUrl = 'https://fdbpacbuunjfipsiplzr.supabase.co'; 
 const supabaseAnonKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Главная страница (уже отдаётся через express.static)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 // Добавить сообщение
 app.post('/add', async (req, res) => {
