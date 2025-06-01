@@ -1,86 +1,71 @@
+require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Инициализация Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
+// Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// API для работы с пользователями
+// API для работы с пользовательской статистикой
 app.get('/api/user/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('user_stats')
-    .select('*')
-    .eq('id', req.params.id)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('user_stats')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle(); // Возвращает null если нет данных
 
-  if (error) return res.status(500).json({ error });
-  res.json(data || {});
+    if (error) throw error;
+    res.json(data || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+app.post('/api/user', async (req, res) => {
+  try {
+    const userData = {
+      ...req.body,
+      last_updated: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('user_stats')
+      .upsert(userData, { onConflict: 'id' });
+
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API для глобальной статистики
 app.get('/api/user/top', async (req, res) => {
   try {
-    // Убираем .single() и работаем с массивом
     const { data, error } = await supabase
       .from('user_stats')
       .select('*')
       .order('wins', { ascending: false })
       .limit(10);
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return res.status(400).json({ 
-        error: 'Database error',
-        details: error.message 
-      });
-    }
-
-    if (!data || data.length === 0) {
-      return res.json([]); // Возвращаем пустой массив вместо ошибки
-    }
-
-    res.json(data);
-    
+    if (error) throw error;
+    res.json(data || []);
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: err.message 
-    });
+    res.status(500).json({ error: err.message });
   }
-});
-
-    if (!data || data.length === 0) {
-      return res.status(404).json({ 
-        message: 'No data found' 
-      });
-    }
-
-    res.json(data);
-    
-  } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: err.message 
-    });
-  }
-});
-
-app.post('/api/user', async (req, res) => {
-  const { data, error } = await supabase
-    .from('user_stats')
-    .upsert(req.body, { onConflict: 'id' });
-    
-  if (error) return res.status(500).json({ error });
-  res.status(201).json(data);
 });
 
 // Маршруты для страниц
@@ -92,6 +77,11 @@ app.get('/stats', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'stats.html'));
 });
 
+app.get('/global-stats', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'global-stats.html'));
+});
+
+// Запуск сервера
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
