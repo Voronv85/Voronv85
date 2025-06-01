@@ -1,29 +1,28 @@
 <script>
-  document.addEventListener('DOMContentLoaded', async () => {
+  async function loadGlobalStats() {
     const tableBody = document.querySelector('#globalStats tbody');
     const statusDiv = document.createElement('div');
     statusDiv.style.margin = '20px';
-    document.body.insertBefore(statusDiv, document.querySelector('button'));
+    document.body.insertBefore(statusDiv, tableBody);
 
     try {
-      statusDiv.textContent = 'Загрузка данных...';
+      statusDiv.textContent = 'Загрузка статистики...';
       statusDiv.style.color = 'blue';
-      
+
       const response = await fetch('/api/user/top');
-      
-      if (!response.ok) {
-        throw new Error(`Ошибка сервера: ${response.status}`);
-      }
-      
       const data = await response.json();
-      
-      if (!data || data.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4">Нет данных для отображения</td></tr>';
-        statusDiv.textContent = 'Нет данных';
+
+      if (!Array.isArray(data)) {
+        throw new Error('Некорректный формат данных');
+      }
+
+      if (data.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="4">Пока нет данных о игроках</td></tr>';
+        statusDiv.textContent = 'Нет данных для отображения';
         statusDiv.style.color = 'orange';
         return;
       }
-      
+
       tableBody.innerHTML = data.map(user => `
         <tr>
           <td>${user.name || 'Аноним'}</td>
@@ -32,34 +31,33 @@
           <td>${formatDate(user.last_updated)}</td>
         </tr>
       `).join('');
-      
+
       statusDiv.textContent = `Загружено ${data.length} записей`;
       statusDiv.style.color = 'green';
-      
+
     } catch (error) {
       console.error('Ошибка:', error);
       statusDiv.textContent = `Ошибка: ${error.message}`;
       statusDiv.style.color = 'red';
-      
       tableBody.innerHTML = `
         <tr>
           <td colspan="4" style="color: red;">
-            Ошибка загрузки данных. Пожалуйста, попробуйте позже.
+            Ошибка при загрузке данных. Пожалуйста, обновите страницу.
           </td>
         </tr>
       `;
     }
-  });
+  }
 
   function formatDate(dateString) {
     if (!dateString) return 'Неизвестно';
-    const options = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    };
-    return new Date(dateString).toLocaleDateString('ru-RU', options);
+    try {
+      return new Date(dateString).toLocaleString('ru-RU');
+    } catch {
+      return dateString;
+    }
   }
+
+  // Загружаем данные при открытии страницы
+  document.addEventListener('DOMContentLoaded', loadGlobalStats);
 </script>
