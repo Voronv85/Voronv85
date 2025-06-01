@@ -1,47 +1,65 @@
 <script>
-  async function loadGlobalStats() {
-    const loader = document.createElement('div');
-    loader.textContent = 'Загрузка данных...';
-    document.body.appendChild(loader);
-    
+  document.addEventListener('DOMContentLoaded', async () => {
+    const tableBody = document.querySelector('#globalStats tbody');
+    const statusDiv = document.createElement('div');
+    statusDiv.style.margin = '20px';
+    document.body.insertBefore(statusDiv, document.querySelector('button'));
+
     try {
+      statusDiv.textContent = 'Загрузка данных...';
+      statusDiv.style.color = 'blue';
+      
       const response = await fetch('/api/user/top');
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Ошибка сервера: ${response.status}`);
       }
       
       const data = await response.json();
-      const tbody = document.querySelector('#globalStats tbody');
       
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4">Нет данных</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="4">Нет данных для отображения</td></tr>';
+        statusDiv.textContent = 'Нет данных';
+        statusDiv.style.color = 'orange';
         return;
       }
       
-      tbody.innerHTML = data.map(user => `
+      tableBody.innerHTML = data.map(user => `
         <tr>
-          <td>${user.name || 'Без имени'}</td>
+          <td>${user.name || 'Аноним'}</td>
           <td>${user.wins || 0}</td>
           <td>${user.losses || 0}</td>
-          <td>${user.last_updated ? new Date(user.last_updated).toLocaleString() : 'Неизвестно'}</td>
+          <td>${formatDate(user.last_updated)}</td>
         </tr>
       `).join('');
       
+      statusDiv.textContent = `Загружено ${data.length} записей`;
+      statusDiv.style.color = 'green';
+      
     } catch (error) {
       console.error('Ошибка:', error);
-      document.querySelector('#globalStats tbody').innerHTML = `
+      statusDiv.textContent = `Ошибка: ${error.message}`;
+      statusDiv.style.color = 'red';
+      
+      tableBody.innerHTML = `
         <tr>
           <td colspan="4" style="color: red;">
-            Ошибка загрузки: ${error.message}
+            Ошибка загрузки данных. Пожалуйста, попробуйте позже.
           </td>
         </tr>
       `;
-    } finally {
-      document.body.removeChild(loader);
     }
-  }
+  });
 
-  // Загружаем данные при открытии страницы
-  document.addEventListener('DOMContentLoaded', loadGlobalStats);
+  function formatDate(dateString) {
+    if (!dateString) return 'Неизвестно';
+    const options = { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleDateString('ru-RU', options);
+  }
 </script>
