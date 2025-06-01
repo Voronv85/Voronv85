@@ -16,7 +16,7 @@ app.use(express.static('public'));
 // API для работы с пользователями
 app.get('/api/user/:id', async (req, res) => {
   const { data, error } = await supabase
-    .from('users')
+    .from('user_stats')
     .select('*')
     .eq('id', req.params.id)
     .single();
@@ -27,7 +27,7 @@ app.get('/api/user/:id', async (req, res) => {
 
 app.get('/api/user/top', async (req, res) => {
   const { data, error } = await supabase
-    .from('users')
+    .from('user_stats')
     .select('*')
     .order('wins', { ascending: false })
     .limit(10);
@@ -38,7 +38,7 @@ app.get('/api/user/top', async (req, res) => {
 
 app.post('/api/user', async (req, res) => {
   const { data, error } = await supabase
-    .from('users')
+    .from('user_stats')
     .upsert(req.body, { onConflict: 'id' });
     
   if (error) return res.status(500).json({ error });
