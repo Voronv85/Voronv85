@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Выбор игры</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .profile {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            color: black;
+        }
+
+        input {
+            padding: 5px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="profile">
+        <h2>Имя: <span id="userName">Загрузка...</span></h2>
+        <input type="text" id="newName" placeholder="Новое имя" />
+        <button onclick="changeName()">Сменить имя</button>
+    </div>
+
+    <h2>Выберите игру:</h2>
+    <a href="game1.html"><button>Игра 1</button></a>
+    <a href="game2.html"><button>Игра 2</button></a>
+
+    <script>
+        const userId = localStorage.getItem("userId");
+
+        function loadUserData() {
+            fetch(`http://localhost:3000/user?id=${userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    localStorage.setItem("userName", data.name);
+                    localStorage.setItem("userWins", data.wins);
+                    localStorage.setItem("userLosses", data.losses);
+                    localStorage.setItem("userLevel", data.level);
+                    document.getElementById("userName").textContent = data.name;
+                });
+        }
+
+        function changeName() {
+            const newName = document.getElementById("newName").value.trim();
+            if (!newName) return alert("Введите новое имя!");
+
+            fetch('http://localhost:3000/update-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, name: newName })
+            })
+                .then(res => res.json())
+                .then(() => {
+                    loadUserData();
+                    alert("Имя изменено!");
+                });
+        }
+
+        if (userId) loadUserData();
+        else window.location.href = "index.html";
+    </script>
+
+</body>
+</html>
