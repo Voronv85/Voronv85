@@ -10,52 +10,37 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-// Middleware
 app.use(express.json());
 app.use(express.static('public'));
 
-// API Routes
-app.get('/api/data', async (req, res) => {
+// API для работы с пользователями
+app.get('/api/user/:id', async (req, res) => {
   const { data, error } = await supabase
-    .from('app_data')
-    .select('*');
-  
+    .from('users')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
+
   if (error) return res.status(500).json({ error });
-  res.json(data);
+  res.json(data || {});
 });
 
-app.post('/api/data', async (req, res) => {
+app.post('/api/user', async (req, res) => {
   const { data, error } = await supabase
-    .from('app_data')
-    .insert([req.body]);
-  
+    .from('users')
+    .upsert(req.body, { onConflict: 'id' });
+    
   if (error) return res.status(500).json({ error });
   res.status(201).json(data);
 });
 
-app.put('/api/data/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('app_data')
-    .update(req.body)
-    .eq('id', req.params.id);
-  
-  if (error) return res.status(500).json({ error });
-  res.json(data);
-});
-
-app.delete('/api/data/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('app_data')
-    .delete()
-    .eq('id', req.params.id);
-  
-  if (error) return res.status(500).json({ error });
-  res.json(data);
-});
-
-// Serve HTML
+// Маршруты для страниц
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/stats', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'stats.html'));
 });
 
 app.listen(port, () => {
