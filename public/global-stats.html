@@ -1,58 +1,47 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Глобальная статистика</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    button { padding: 10px 20px; margin-top: 20px; cursor: pointer; }
-  </style>
-</head>
-<body>
-  <h1>Глобальная статистика игроков</h1>
-  
-  <table id="globalStats">
-    <thead>
-      <tr>
-        <th>Имя</th>
-        <th>Победы</th>
-        <th>Поражения</th>
-        <th>Последняя активность</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  
-  <button onclick="window.location.href='/'">На главную</button>
-
-  <script>
-    async function loadGlobalStats() {
-      try {
-        const response = await fetch('/api/user/top');
-        const data = await response.json();
-        
-        const tbody = document.querySelector('#globalStats tbody');
-        tbody.innerHTML = '';
-        
-        data.forEach(user => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${user.name}</td>
-            <td>${user.wins}</td>
-            <td>${user.losses}</td>
-            <td>${new Date(user.last_updated).toLocaleString()}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      } catch (error) {
-        console.error('Ошибка загрузки:', error);
-      }
-    }
+<script>
+  async function loadGlobalStats() {
+    const loader = document.createElement('div');
+    loader.textContent = 'Загрузка данных...';
+    document.body.appendChild(loader);
     
-    window.onload = loadGlobalStats;
-  </script>
-</body>
-</html>
+    try {
+      const response = await fetch('/api/user/top');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const tbody = document.querySelector('#globalStats tbody');
+      
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">Нет данных</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = data.map(user => `
+        <tr>
+          <td>${user.name || 'Без имени'}</td>
+          <td>${user.wins || 0}</td>
+          <td>${user.losses || 0}</td>
+          <td>${user.last_updated ? new Date(user.last_updated).toLocaleString() : 'Неизвестно'}</td>
+        </tr>
+      `).join('');
+      
+    } catch (error) {
+      console.error('Ошибка:', error);
+      document.querySelector('#globalStats tbody').innerHTML = `
+        <tr>
+          <td colspan="4" style="color: red;">
+            Ошибка загрузки: ${error.message}
+          </td>
+        </tr>
+      `;
+    } finally {
+      document.body.removeChild(loader);
+    }
+  }
+
+  // Загружаем данные при открытии страницы
+  document.addEventListener('DOMContentLoaded', loadGlobalStats);
+</script>
