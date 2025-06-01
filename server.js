@@ -25,6 +25,17 @@ app.get('/api/user/:id', async (req, res) => {
   res.json(data || {});
 });
 
+app.get('/api/user/top', async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('wins', { ascending: false })
+    .limit(10);
+    
+  if (error) return res.status(500).json({ error });
+  res.json(data);
+});
+
 app.post('/api/user', async (req, res) => {
   const { data, error } = await supabase
     .from('users')
