@@ -1,61 +1,41 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const bodyParser = require('body-parser');
-const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
-const STATS_FILE = path.join(__dirname, 'stats.json');
+const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(__dirname, 'data', 'players.json');
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.static(__dirname));
 
-// Загружаем данные из файла
-function readStats() {
-    const data = fs.readFileSync(STATS_FILE);
-    return JSON.parse(data);
-}
+// Сохраняем результат игрока
+app.post('/api/update', (req, res) => {
+  const { name, score } = req.body;
 
-// Сохраняем данные в файл
-function writeStats(data) {
-    fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2));
-}
+  let players = [];
+  if (fs.existsSync(DATA_FILE)) {
+    const data = fs.readFileSync(DATA_FILE);
+    players = JSON.parse(data);
+  }
 
-// Получение/обновление данных пользователя
-app.post('/update-user', (req, res) => {
-    const { userId, name, wins = 0, losses = 0, level = 1 } = req.body;
+  const playerIndex = players.findIndex(p => p.name === name);
+  if (playerIndex > -1) {
+    players[playerIndex].score += score;
+  } else {
+    players.push({ name, score });
+  }
 
-    if (!userId) {
-        return res.status(400).json({ error: 'userId обязателен' });
-    }
+  fs.writeFileSync(DATA_FILE, JSON.stringify(players, null, 2));
+  res.json({ success: true });
+});
 
-    let stats = readStats();
-
-    // Если пользователь существует — обновляем
-    const userIndex = stats.findIndex(u => u.id === userId);
-    if (userIndex > -1) {
-        stats[userIndex].name = name || stats[userIndex].name;
-        stats[userIndex].wins = wins;
-        stats[userIndex].losses = losses;
-        stats[userIndex].level = level;
-    } else {
-        // Иначе добавляем нового
-        stats.push({
-            id: userId,
-            name: name || userId,
-            wins,
-            losses,
-            level
-        });
-    }
-
-    writeStats(stats);
-
-    res.json(stats.find(u => u.id === userId));
+// Получаем всех игроков
+app.get('/api/players', (req, res) => {
+  const data = fs.readFileSync(DATA_FILE);
+  res.send(data);
 });
 
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
