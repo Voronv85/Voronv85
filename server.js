@@ -26,14 +26,19 @@ app.get('/api/user/:id', async (req, res) => {
 });
 
 app.get('/api/user/top', async (req, res) => {
-  const { data, error } = await supabase
-    .from('user_stats')
-    .select('*')
-    .order('wins', { ascending: false })
-    .limit(10);
+  try {
+    const { data, error } = await supabase
+      .from('user_stats')  // Важно: имя таблицы должно совпадать
+      .select('id, name, wins, losses, last_updated')
+      .order('wins', { ascending: false })
+      .limit(10);
     
-  if (error) return res.status(500).json({ error });
-  res.json(data);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error('Ошибка загрузки статистики:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/user', async (req, res) => {
