@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: supabase-render-app
+    runtime: node
+    buildCommand: npm install
+    startCommand: node index.js
+    env: node
+    envVars:
+      - key: SUPABASE_URL
+        fromDatabase:
+          name: supabase-creds
+          property: connection_url
+      - key: SUPABASE_KEY
+        fromDatabase:
+          name: supabase-creds
+          property: api_key
