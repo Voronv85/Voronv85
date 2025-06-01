@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Результаты игроков</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #aaa; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h2>Таблица игроков</h2>
+  <div id="table-container">Загрузка...</div>
+
+  <script>
+    const client = supabase.createClient(
+      'https://fdbpacbuunjfipsiplzr.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYnBhY2J1dW5qZmlwc2lwbHpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjA3MTAsImV4cCI6MjA2NDMzNjcxMH0.tSa-URjkTfInYezog_o76-tDcRshSuvC0axS-NKmYmw'
+    );
+
+    async function loadResults() {
+      const container = document.getElementById('table-container');
+
+      try {
+        const { data, error } = await client
+          .from('user_stats')
+          .select('*')
+          .order('wins', { ascending: false });
+
+        if (error) {
+          container.textContent = 'Ошибка при получении данных: ' + error.message;
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          container.textContent = 'Нет данных';
+          return;
+        }
+
+        let html = '<table><tr><th>Имя</th><th>Победы</th><th>Поражения</th></tr>';
+        data.forEach(row => {
+          html += `<tr>
+            <td>${row.name}</td>
+            <td>${row.wins}</td>
+            <td>${row.losses}</td>
+          </tr>`;
+        });
+        html += '</table>';
+        container.innerHTML = html;
+
+      } catch (e) {
+        console.error('Ошибка загрузки:', e);
+        container.textContent = 'Произошла ошибка: ' + e.message;
+      }
+    }
+
+    loadResults();
+  </script>
+</body>
+</html>
