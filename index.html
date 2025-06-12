@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Checkers Init</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script> 
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+    }
+
+    .container {
+      background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 40px 30px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+      color: #ffffffcc;
+    }
+
+    .loader {
+      border: 6px solid #ffffff33;
+      border-top: 6px solid #ffffffcc;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      margin: 0 auto;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Модальное окно */
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .modal.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal-content {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 30px 20px;
+      width: 90%;
+      max-width: 350px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      animation: fadeIn 0.4s ease-in-out;
+    }
+
+    .modal input[type="text"] {
+      width: 100%;
+      padding: 10px 15px;
+      margin-top: 15px;
+      margin-bottom: 20px;
+      border: none;
+      border-radius: 8px;
+      outline: none;
+      font-size: 1rem;
+    }
+
+    .modal button {
+      background-color: #ff4d4d;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .modal button:hover {
+      background-color: #e63e3e;
+    }
+
+    @media (max-width: 500px) {
+      .container {
+        padding: 30px 20px;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Основной экран -->
+  <div class="container">
+    <h2 id="status">Загрузка...</h2>
+    <div class="loader"></div>
+  </div>
+
+  <!-- Модальное окно ввода имени -->
+  <div class="modal" id="nameModal">
+    <div class="modal-content">
+      <h2>Введите ваше имя</h2>
+      <input type="text" id="nameInput" placeholder="Ваше имя..." />
+      <button onclick="saveName()">Сохранить</button>
+    </div>
+  </div>
+
+  <script>
+    const client = supabase.createClient(
+      'https://fdbpacbuunjfipsiplzr.supabase.co', 
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYnBhY2J1dW5qZmlwc2lwbHpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjA3MTAsImV4cCI6MjA2NDMzNjcxMH0.tSa-URjkTfInYezog_o76-tDcRshSuvC0axS-NKmYmw'
+    );
+
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    function withTimeout(promise, timeout = 5000) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Время ожидания истекло')), timeout);
+        promise.then(value => {
+          clearTimeout(timer);
+          resolve(value);
+        }, error => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+    }
+
+    async function initUser() {
+      const status = document.getElementById('status');
+      const modal = document.getElementById('nameModal');
+      const input = document.getElementById('nameInput');
+
+      status.textContent = 'Проверка данных в кэше...';
+
+      let id = localStorage.getItem('user_id');
+      let name = localStorage.getItem('user_name');
+      let wins = parseInt(localStorage.getItem('wins')) || 0;
+      let losses = parseInt(localStorage.getItem('losses')) || 0;
+
+      if (!id) {
+        id = generateUUID();
+        modal.classList.add('active');
+        input.focus();
+
+        // Сохранение по кнопке или Enter
+        window.saveName = () => {
+          name = input.value.trim() || 'Без имени';
+          localStorage.setItem('user_id', id);
+          localStorage.setItem('user_name', name);
+          localStorage.setItem('wins', '0');
+          localStorage.setItem('losses', '0');
+          modal.classList.remove('active');
+          continueInit();
+        };
+
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') saveName();
+        });
+
+        return;
+      }
+
+      continueInit();
+
+      function continueInit() {
+        status.textContent = 'Создание нового пользователя...';
+        if (!navigator.onLine) {
+          status.innerHTML = `
+            <div style="color: #ffdd57;">⚠️ Офлайн режим</div>
+            <p style="font-size: 0.9em; margin-top: 10px;">
+              Нет подключения к интернету.<br>
+              Используются локальные данные.
+            </p>
+          `;
+          setTimeout(() => window.location.href = 'start.html', 2000);
+          return;
+        }
+
+        status.textContent = 'Сохраняем в базу...';
+        const upsertPromise = client.from('user_stats').upsert([{ id, name, wins, losses }]);
+
+        withTimeout(upsertPromise, 7000).then(({ error }) => {
+          if (error) throw error;
+          status.textContent = 'Данные сохранены. Переход...';
+          setTimeout(() => window.location.href = 'start.html', 1000);
+        }).catch(e => {
+          console.error('Ошибка:', e.message);
+          const isNetworkError = e.message.includes("Время ожидания") ||
+                                 e.message.includes("Network") ||
+                                 e.message.includes("Failed to fetch");
+
+          if (isNetworkError) {
+            status.innerHTML = `
+              <div style="color: #ffdd57;">⚠️ Офлайн режим</div>
+              <p style="font-size: 0.9em; margin-top: 10px;">
+                Нет связи с сервером.<br>
+                Используются локальные данные.
+              </p>
+            `;
+          } else {
+            status.textContent = 'Ошибка: ' + e.message;
+          }
+
+          setTimeout(() => window.location.href = 'start.html', 3000);
+        });
+      }
+    }
+
+    initUser();
+  </script>
+</body>
+</html>

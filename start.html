@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Добро пожаловать</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+     background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+      color: white;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    h2 {
+      margin-bottom: 1rem;
+    }
+
+    .stats {
+      margin: 1rem 0;
+    }
+
+    button {
+      display: inline-block;
+      padding: 0.6rem 1.2rem;
+      margin-top: 1rem;
+      background-color: #ffffff22;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #ffffff44;
+    }
+
+    .games {
+      margin-top: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .game-card {
+      background-color: rgba(255, 255, 255, 0.15);
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: left;
+      transition: transform 0.2s;
+    }
+
+    .game-card:hover {
+      transform: scale(1.02);
+    }
+
+    .game-title {
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+
+    .game-desc {
+      font-size: 0.9rem;
+      margin-top: 0.4rem;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Привет, <span id="name"></span>!</h2>
+
+  <div class="stats">
+    <p>Побед: <span id="wins"></span></p>
+    <p>Поражений: <span id="losses"></span></p>
+  </div>
+
+  <button onclick="changeName()">Сменить имя</button>
+  <button onclick="location.href='results.html'">Смотреть таблицу игроков</button>
+    <button onclick="location.href='chat.html'">Перейти в чат</button>
+  <div class="games" id="games-container">
+    <!-- Кнопки будут добавлены здесь -->
+  </div>
+</div>
+
+<script>
+  // Загрузка имени и статистики
+  document.getElementById('name').innerText = localStorage.getItem('user_name');
+  document.getElementById('wins').innerText = localStorage.getItem('wins') || 0;
+  document.getElementById('losses').innerText = localStorage.getItem('losses') || 0;
+
+ function changeName() {
+  const newName = prompt("Введите новое имя:", localStorage.getItem('user_name'));
+  if (newName && newName.trim() !== "") {
+    localStorage.setItem('user_name', newName.trim());
+    location.href = 'index.html'; // Переход на index.html
+  }
+}
+
+  // Функция проверки существования файла
+  async function checkFileExists(url) {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+ async function loadGames() {
+  const container = document.getElementById('games-container');
+
+  for (let i = 1; i <= 10; i++) {
+    const gameHtml = `game${i}.html`;
+    const gameJson = `game${i}.json`;
+
+    try {
+      const res = await fetch(gameJson);
+
+      if (!res.ok) {
+        // Тихо пропускаем, если файл не найден
+        continue;
+      }
+
+      const data = await res.json();
+
+      const card = document.createElement('div');
+      card.className = 'game-card';
+      card.innerHTML = `
+        <div class="game-title">${data.title}</div>
+        <div class="game-desc">${data.description}</div>
+        <button style="margin-top: 0.5rem;" onclick="location.href='${gameHtml}'">Играть</button>
+      `;
+      container.appendChild(card);
+    } catch (err) {
+      // Игнорируем ошибки, например, если файл недоступен или не существует
+      // Можно раскомментировать для логирования в разработке:
+      // console.log(`Файл game${i}.json не найден или поврежден`);
+      continue;
+    }
+  }
+}
+
+  loadGames();
+</script>
+
+</body>
+</html>

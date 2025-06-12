@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Результаты игроков</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script> 
+
+  <style>
+    /* Основные стили */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+     background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+      color: #fff;
+      margin: 0;
+      padding: 0;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    .back-button {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.3s ease;
+    }
+
+    .back-button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    h2 {
+      text-align: center;
+      margin: 0 auto;
+      font-size: 1.8rem;
+      flex-grow: 1;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      overflow-x: auto; /* Горизонтальный скролл при необходимости */
+    }
+
+    .loading {
+      text-align: center;
+      font-size: 1.2rem;
+      margin-top: 2rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: rgba(255, 255, 255, 0.1);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    tr:hover {
+      background-color: rgba(255, 255, 255, 0.07);
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .pagination button {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-size: 1rem;
+    }
+
+    .pagination button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .page-info {
+      margin: 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-button">⬅ Выход</button>
+  <h2>🏆 Таблица игроков</h2>
+</div>
+
+<div class="container">
+  <div id="table-container" class="loading">Загрузка данных...</div>
+
+  <div class="pagination">
+    <button id="prevBtn" disabled>⬅ Назад</button>
+    <div class="page-info" id="pageInfo">Страница 1 из 1</div>
+    <button id="nextBtn">Вперед ➡</button>
+  </div>
+</div>
+
+<script>
+  document.querySelector('.back-button').addEventListener('click', () => {
+    window.location.href = 'start.html';
+  });
+
+  const client = supabase.createClient(
+    'https://fdbpacbuunjfipsiplzr.supabase.co', 
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYnBhY2J1dW5qZmlwc2lwbHpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjA3MTAsImV4cCI6MjA2NDMzNjcxMH0.tSa-URjkTfInYezog_o76-tDcRshSuvC0axS-NKmYmw'
+  );
+
+  const ITEMS_PER_PAGE = 10;
+  let currentPage = 1;
+  let totalPages = 1;
+  let allData = [];
+
+  async function loadData() {
+    try {
+      const { data, error } = await client
+        .from('user_stats')
+        .select('*')
+        .order('wins', { ascending: false });
+
+      if (error) throw error;
+
+      allData = data || [];
+      totalPages = Math.ceil(allData.length / ITEMS_PER_PAGE);
+      renderPage(currentPage);
+
+    } catch (e) {
+      document.getElementById('table-container').innerHTML =
+        `<div class="loading">Ошибка загрузки: ${e.message}</div>`;
+    }
+  }
+
+  function renderPage(page) {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    const pageData = allData.slice(start, end);
+
+    const container = document.getElementById('table-container');
+    const pageInfo = document.getElementById('pageInfo');
+
+    if (pageData.length === 0) {
+      container.innerHTML = '<div class="loading">Нет данных</div>';
+      return;
+    }
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Имя</th><th>Победы</th><th>Поражения</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    pageData.forEach(row => {
+      html += `
+        <tr>
+          <td>${row.name}</td>
+          <td>${row.wins}</td>
+          <td>${row.losses}</td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+    pageInfo.textContent = `Страница ${currentPage} из ${totalPages}`;
+
+    document.getElementById('prevBtn').disabled = currentPage === 1;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages;
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderPage(currentPage);
+    }
+  });
+
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderPage(currentPage);
+    }
+  });
+
+  loadData();
+</script>
+
+</body>
+</html>

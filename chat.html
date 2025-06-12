@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>💬 Чат</title>
+  <!-- Подключение Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>     
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+      color: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      flex-wrap: wrap;
+    }
+    .back-button {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.3s ease;
+      flex-shrink: 0;
+    }
+    h2 {
+      text-align: center;
+      margin: 0 auto;
+      font-size: 1.8rem;
+      flex-grow: 1;
+    }
+    .chat-container {
+      width: 90%;
+      max-width: 600px;
+      margin: 2rem auto;
+      background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      height: 70vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .messages {
+      overflow-y: auto;
+      flex-grow: 1;
+      padding-right: 10px;
+      word-wrap: break-word;
+    }
+    .message {
+      background-color: rgba(255, 255, 255, 0.05);
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      word-break: break-word;
+    }
+    .my-message {
+      background-color: rgba(0, 255, 150, 0.2) !important;
+    }
+    .sender {
+      font-weight: bold;
+      color: #ffd700;
+    }
+    .timestamp {
+      font-size: 0.8em;
+      color: #aaa;
+      margin-top: 4px;
+      display: block;
+    }
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .pagination button {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      flex-shrink: 0;
+      min-width: 80px;
+      text-align: center;
+    }
+    #page-info {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #ccc;
+    }
+    form {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    input[type="text"] {
+      flex-grow: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      outline: none;
+      min-width: 200px;
+      word-break: break-word;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    @media (max-width: 600px) {
+      h2 {
+        font-size: 1.4rem;
+      }
+      .chat-container {
+        padding: 0.8rem;
+        margin: 1.5rem 1rem;
+      }
+      .back-button {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+      }
+      input[type="text"] {
+        min-width: 100%;
+      }
+    }
+    .loading {
+      text-align: center;
+      color: #aaa;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="header">
+  <button class="back-button">⬅ Выход</button>
+  <h2>💬 Чат</h2>
+</div>
+<div class="chat-container">
+  <div class="messages" id="chat-messages">Загрузка сообщений...</div>
+  <div class="pagination">
+    <button id="prev-page" disabled>⬅ Назад</button>
+    <span id="page-info">Загрузка...</span>
+    <button id="next-page" disabled>Вперед ➡</button>
+    <button id="refresh-button" style="min-width: 100px;">🔄 Обновить</button>
+  </div>
+  <form id="chat-form">
+    <input type="text" id="message-input" placeholder="Введите ваше сообщение..." required />
+    <button type="submit">Отправить</button>
+  </form>
+</div>
+<script>
+  document.querySelector('.back-button').addEventListener('click', () => {
+    window.location.href = 'start.html';
+  });
+  window.addEventListener('load', async function () {
+    if (!window.supabase) {
+      document.getElementById('chat-messages').innerHTML = `<div style="color: red;">Ошибка: Supabase не загружен.</div>`;
+      console.error("Supabase не найден");
+      return;
+    }
+
+    const supabase = window.supabase.createClient(
+      'https://fdbpacbuunjfipsiplzr.supabase.co',     
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkYnBhY2J1dW5qZmlwc2lwbHpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjA3MTAsImV4cCI6MjA2NDMzNjcxMH0.tSa-URjkTfInYezog_o76-tDcRshSuvC0axS-NKmYmw'
+    );
+
+    const messageInput = document.getElementById('message-input');
+    const messagesContainer = document.getElementById('chat-messages');
+    const pageInfo = document.getElementById('page-info');
+    const user_id = localStorage.getItem('user_id') || 'unknown_user';
+    const user_name = localStorage.getItem('user_name') || 'Гость';
+
+    if (!user_id || !user_name) {
+      messagesContainer.innerHTML = '<div class="loading">Ошибка: пользователь не найден</div>';
+      console.error('Пользователь не авторизован');
+      return;
+    }
+
+    let currentPage = 0;
+    const pageSize = 20;
+    let totalPages = 1;
+    let lastLoadedTime = null;
+
+    function formatTimestamp(timestamp) {
+      const date = new Date(timestamp);
+      const days = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const dayOfWeek = days[date.getDay()];
+      const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      return `${time} ${dayOfWeek}, ${day}.${month}.${date.getFullYear()}`;
+    }
+
+    async function loadMessages(page) {
+      messagesContainer.innerHTML = '<div class="loading">Загрузка сообщений...</div>';
+      const start = page * pageSize;
+      const end = start + pageSize - 1;
+      const { data, error, count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(start, end);
+
+      if (error) {
+        console.error('Ошибка загрузки сообщений:', error.message);
+        messagesContainer.innerHTML = '<div class="loading">Ошибка загрузки</div>';
+        return;
+      }
+
+      messagesContainer.innerHTML = '';
+      if (data.length === 0) {
+        messagesContainer.innerHTML = '<div class="loading">Сообщений нет</div>';
+        pageInfo.textContent = `Страница ${currentPage + 1} из 1`;
+        updatePaginationButtons(true);
+        setTimeout(() => loadMessages(currentPage), 5000);
+        return;
+      }
+
+      data.reverse().forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message';
+        if (msg.user_name === user_name) {
+          div.classList.add('my-message');
+        }
+        div.innerHTML = `
+          <span class="sender">${msg.user_name}</span>: ${msg.message}<br/>
+          <span class="timestamp">${formatTimestamp(msg.created_at)}</span>
+        `;
+        messagesContainer.appendChild(div);
+      });
+
+      currentPage = page;
+      totalPages = Math.ceil(count / pageSize);
+      pageInfo.textContent = `Страница ${currentPage + 1} из ${totalPages}`;
+      updatePaginationButtons(data.length < pageSize);
+      if (currentPage === 0) {
+        lastLoadedTime = data[data.length - 1]?.created_at || null;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        startRefreshCountdown();
+      }
+    }
+
+    function updatePaginationButtons(isLastPage) {
+      document.getElementById('prev-page').disabled = currentPage === 0;
+      document.getElementById('next-page').disabled = isLastPage || currentPage >= totalPages - 1;
+    }
+
+    document.getElementById('prev-page').addEventListener('click', () => {
+      if (currentPage > 0) loadMessages(currentPage - 1);
+    });
+
+    document.getElementById('next-page').addEventListener('click', () => {
+      if (currentPage < totalPages - 1) loadMessages(currentPage + 1);
+    });
+
+    async function checkForNewMessages() {
+      if (currentPage !== 0) return;
+
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .gt('created_at', lastLoadedTime || new Date().toISOString());
+
+      if (error) {
+        console.error("Ошибка новых сообщений:", error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        data.reverse().forEach(msg => {
+          const div = document.createElement('div');
+          div.className = 'message';
+          if (msg.user_name === user_name) {
+            div.classList.add('my-message');
+          }
+          div.innerHTML = `
+            <span class="sender">${msg.user_name}</span>: ${msg.message}<br/>
+            <span class="timestamp">${formatTimestamp(msg.created_at)}</span>
+          `;
+          messagesContainer.appendChild(div);
+        });
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        lastLoadedTime = data[0].created_at;
+      }
+    }
+
+    // Таймер обновления
+    let refreshInterval = 30000; // мс
+    let countdownInterval = null;
+
+    function startRefreshCountdown() {
+      const button = document.getElementById('refresh-button');
+      let timeLeft = refreshInterval / 1000;
+
+      button.textContent = `🔄 Через ${timeLeft} с`;
+
+      if (countdownInterval) clearInterval(countdownInterval);
+
+      countdownInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+          clearInterval(countdownInterval);
+          checkForNewMessages();
+          startRefreshCountdown();
+        } else {
+          button.textContent = `🔄 Через ${timeLeft} с`;
+        }
+      }, 1000);
+    }
+
+    document.getElementById('refresh-button').addEventListener('click', async () => {
+      clearInterval(countdownInterval);
+      await checkForNewMessages();
+      startRefreshCountdown();
+    });
+
+    document.getElementById('chat-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = messageInput.value.trim();
+      if (!message) return;
+      const { error } = await supabase.from('chat_messages').insert([
+        { user_id, user_name, message }
+      ]);
+      
+      if (error) {
+        alert('Ошибка отправки сообщения: ' + error.message);
+      } else {
+        messageInput.value = '';
+        
+      }
+    });
+
+    messageInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('chat-form').requestSubmit();
+      }
+    });
+
+    await loadMessages(currentPage);
+  });
+</script>
+</body>
+</html>

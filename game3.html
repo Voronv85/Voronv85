@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Viewer — Индустрия</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        .ui-button { position: absolute; z-index:100; padding:8px 12px; background:rgba(40,40,40,0.7); color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; backdrop-filter:blur(5px) }
+        #resetCamera { bottom:20px; left:20px }
+        #toggleMenu  { top:20px; right:20px }
+        #loadProgress {
+            position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            padding:8px 12px; background:rgba(0,0,0,0.8); color:#fff; font-size:14px;
+            border-radius:4px; display:none; z-index:200;
+        }
+        #crosshair {
+            position:absolute; top:50%; left:50%; width:24px; height:24px;
+            margin:-12px 0 0 -12px; pointer-events:none; z-index:150;
+        }
+        #crosshair div { position:absolute; background: var(--crosshair-color); }
+        #crosshair .horiz { top:50%; left:0; width:100%; height:2px; margin-top:-1px }
+        #crosshair .vert  { left:50%; top:0; width:2px; height:100%; margin-left:-1px }
+        #crosshair .dot   { top:50%; left:50%; width:4px; height:4px; margin:-2px 0 0 -2px; border-radius:50%; }
+        #objectLabel {
+            position:absolute; padding:6px 10px; background:rgba(0,0,0,0.7);
+            color:#fff; border:1px solid #fff; border-radius:4px; font-size:13px;
+            pointer-events:none; transform:translate(-50%,-120%); display:none; z-index:150;
+        }
+        #compactMenu {
+            position:absolute; top:60px; right:20px; background:rgba(40,40,40,0.7);
+            border-radius:8px; padding:12px; display:none; z-index:150;
+            backdrop-filter:blur(5px); max-width:360px; box-shadow:0 4px 8px rgba(0,0,0,0.2);
+        }
+        .slider-container, .select-container, .checkbox-option, .menu-button {
+            margin:8px 0; color:#fff; font-size:13px;
+        }
+        .slider-container label, .select-container label { display:block; margin-bottom:4px; }
+        .slider-container input { width:100% }
+        .select-container select {
+            width:100%; padding:4px; font-size:13px; border-radius:4px; border:none;
+            background:rgba(255,255,255,0.2); color: #89CFF0 !important;
+        }
+        .color-grid {
+            display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:10px 0;
+        }
+        .color-option { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid rgba(255,255,255,0.3) }
+        .checkbox-option input { margin-right:6px }
+        .menu-button {
+            display:block; width:100%; padding:6px 0; background:rgba(255,255,255,0.1);
+            border:none; border-radius:4px; text-align:center; cursor:pointer;
+        }
+
+        /* Бегущая строка подсказок */
+        #hotkeyHint {
+            position:absolute; top:0; left:0; width:100%; background:rgba(0,0,0,0.8);
+            color:#fff; font-size:13px; z-index:250; overflow:hidden; white-space:nowrap;
+        }
+        #hotkeyHint span {
+            display:inline-block; padding-left:100%; animation:marquee 30s linear infinite;
+        }
+        @keyframes marquee {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-100%); }
+        }
+
+        /* Кнопка выхода */
+        #exit-button {
+            position: fixed;
+            top: 5px;
+            left: 5px;
+            z-index: 9999;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: white;
+            background-color: #e74c3c;
+            border-radius: 5px;
+            text-decoration: none;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            animation: pulse 2s infinite;
+            transition: transform 0.2s ease;
+        }
+        #exit-button:hover {
+            transform: scale(1.1);
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="hotkeyHint"><span>
+        1–0: выбрать модель /// C: фон /// A: оси XYZ /// G: сетка /// N: имена объектов /// H: перекрёстие /// R: случайные цвета /// M: режим камеры /// U/J: Ambient ± /// I/K: Directional ±
+    </span></div>
+    <a href="start.html" id="exit-button">ВЫХОД</a>
+    <button id="resetCamera" class="ui-button">Сбросить камеру</button>
+    <button id="toggleMenu"  class="ui-button">Настройки</button>
+    <div id="loadProgress">Загрузка: 0%</div>
+    <div id="objectLabel"></div>
+    <div id="crosshair">
+        <div class="horiz"></div>
+        <div class="vert"></div>
+        <div class="dot"></div>
+    </div>
+    <div id="compactMenu">
+        <h4 style="color:#fff;margin:0 0 8px;">Настройки</h4>
+
+        <!-- Загрузка модели -->
+        <div class="select-container">
+            <label for="modelFile">Загрузить свою модель:</label>
+            <input type="file" id="modelFile" accept=".glb,.gltf" />
+        </div>
+
+        <div class="slider-container">
+            <label for="ambientLight">Ambient свет <small>(U/J)</small>:</label>
+            <input type="range" id="ambientLight" min="0" max="1" step="0.1">
+        </div>
+        <div class="slider-container">
+            <label for="directionalLight">Directional свет <small>(I/K)</small>:</label>
+            <input type="range" id="directionalLight" min="0" max="1" step="0.1">
+        </div>
+        <label style="color:#fff;font-size:13px;margin-top:8px;">
+            Цвет фона <small>(C)</small>:
+        </label>
+        <div class="color-grid">
+            <div class="color-option" style="background:#FFFFFF" data-color="#FFFFFF"></div>
+            <div class="color-option" style="background:#000000" data-color="#000000"></div>
+            <div class="color-option" style="background:#3498db" data-color="#3498db"></div>
+            <div class="color-option" style="background:#9b59b6" data-color="#9b59b6"></div>
+            <div class="color-option" style="background:#2ecc71" data-color="#2ecc71"></div>
+            <div class="color-option" style="background:#e74c3c" data-color="#e74c3c"></div>
+            <div class="color-option" style="background:#95a5a6" data-color="#95a5a6"></div>
+            <div class="color-option" style="background:#89CFF0" data-color="#89CFF0"></div>
+        </div>
+        <div class="checkbox-option">
+            <input type="checkbox" id="showAxes"><label for="showAxes">Оси XYZ <small>(A)</small></label>
+        </div>
+        <div class="checkbox-option">
+            <input type="checkbox" id="showGrid"><label for="showGrid">Сетка <small>(G)</small></label>
+        </div>
+        <div class="checkbox-option">
+            <input type="checkbox" id="randomColors"><label for="randomColors">Случайные цвета материалов <small>(R)</small></label>
+        </div>
+        <div class="checkbox-option">
+            <input type="checkbox" id="showNames"><label for="showNames">Показывать имена объектов <small>(N)</small></label>
+        </div>
+        <div class="checkbox-option">
+            <input type="checkbox" id="showCrosshair"><label for="showCrosshair">Показывать перекрёстие <small>(H)</small></label>
+        </div>
+        <div class="select-container">
+            <label for="cameraType">Режим камеры <small>(M)</small>:</label>
+            <select id="cameraType">
+                <option value="persp">Перспективная</option>
+                <option value="ortho">Ортографическая</option>
+            </select>
+        </div>
+        <div class="select-container">
+            <label for="modelSelect">3D модель <small>(1–0)</small>:</label>
+            <select id="modelSelect"><option>— проверка… —</option></select>
+        </div>
+        <button id="clearCache" class="menu-button">Очистить кэш</button>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script> 
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script> 
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script> 
+    <script>
+        const STORAGE_KEY = 'viewerSettings';
+        const scene = new THREE.Scene();
+        let frustumSize = 10, aspect = window.innerWidth/window.innerHeight;
+        const nearPlane = 0.01, farPlane = 5000;
+
+        // Камеры
+        const perspCam = new THREE.PerspectiveCamera(75, aspect, nearPlane, farPlane);
+        const orthoCam = new THREE.OrthographicCamera(-frustumSize*aspect/2, frustumSize*aspect/2, frustumSize/2, -frustumSize/2, nearPlane, farPlane);
+        let camera = perspCam;
+        camera.position.set(0,0,5);
+
+        // Рендер + OrbitControls
+        const renderer = new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.1;
+
+        // Свет и вспомогательные
+        const ambientLight = new THREE.AmbientLight(0xffffff,0.5);
+        const directionalLight = new THREE.DirectionalLight(0xffffff,0.8);
+        directionalLight.position.set(1,1,1);
+        scene.add(ambientLight, directionalLight);
+        const axesHelper = new THREE.AxesHelper(5); axesHelper.visible = false; scene.add(axesHelper);
+        const gridHelper = new THREE.GridHelper(10,10); gridHelper.visible = false; scene.add(gridHelper);
+
+        // Raycaster + подсветка
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2(0,0);
+        let highlightBox = null;
+
+        // UI элементы
+        const ambSlider     = document.getElementById('ambientLight'),
+              dirSlider     = document.getElementById('directionalLight'),
+              colorOpts     = document.querySelectorAll('.color-option'),
+              cbAxes        = document.getElementById('showAxes'),
+              cbGrid        = document.getElementById('showGrid'),
+              cbRandom      = document.getElementById('randomColors'),
+              cbShowNames   = document.getElementById('showNames'),
+              cbCrosshair   = document.getElementById('showCrosshair'),
+              cameraSelect  = document.getElementById('cameraType'),
+              modelSelect   = document.getElementById('modelSelect'),
+              toggleMenu    = document.getElementById('toggleMenu'),
+              resetBtn      = document.getElementById('resetCamera'),
+              clearCacheBtn = document.getElementById('clearCache'),
+              menu          = document.getElementById('compactMenu'),
+              progressDiv   = document.getElementById('loadProgress'),
+              objectLabel   = document.getElementById('objectLabel'),
+              crosshair     = document.getElementById('crosshair');
+
+        const modelFileInput = document.getElementById('modelFile'); // Новое
+
+        let currentBgColor = '#000000', currentModel = null, modelObject = null;
+
+        function updateCrosshairColor(){
+            const hex = currentBgColor.slice(1);
+            const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+            const lum = 0.299*r + 0.587*g + 0.114*b;
+            crosshair.style.setProperty('--crosshair-color', lum > 186 ? '#000' : '#fff');
+        }
+
+        async function populateModelList(){
+            modelSelect.innerHTML = '<option>— проверка… —</option>';
+            const models = Array.from({length:10},(_,i)=>`model${i+1}.glb`);
+            const lastMod = {};
+            const opts = [];
+            await Promise.all(models.map(async u => {
+                try {
+                    const r = await fetch(u, { method:'HEAD', cache:'no-cache' });
+                    if (!r.ok) return;
+                    const lm = r.headers.get('Last-Modified')||r.headers.get('ETag')||String(Date.now());
+                    const tag = lastMod[u] === lm ? lastMod[u+'_url'] : `${u}?v=${encodeURIComponent(lm)}`;
+                    lastMod[u]=lm; lastMod[u+'_url']=tag;
+                    const len = +r.headers.get('content-length')||0;
+                    const size = len<1024?len+' B':(len/1024<1024?(len/1024).toFixed(1)+' KB':(len/1024/1024).toFixed(1)+' MB');
+                    opts.push({name:u,url:tag,size});
+                } catch{}
+            }));
+            modelSelect.innerHTML = opts.length
+                ? opts.map(o=>`<option value="${o.url}">${o.name} (${o.size})</option>`).join('')
+                : '<option>— нет моделей —</option>';
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}').model||'';
+            const idx = opts.findIndex(o=>o.name===saved.split('?')[0]);
+            if(idx>=0){ modelSelect.selectedIndex=idx; loadModel(opts[idx].url); }
+            else loadModel(modelSelect.value);
+        }
+
+        function saveOriginalMaterials(obj){
+            obj.traverse(n=>{ if(n.isMesh) n.userData.origMat = Array.isArray(n.material)?n.material.map(m=>m.clone()):n.material.clone(); });
+        }
+
+        function applyRandomColors(obj){
+            obj.traverse(n=>{ if(n.isMesh){
+                const orig = Array.isArray(n.userData.origMat)?n.userData.origMat:[n.userData.origMat];
+                const newM = orig.map(m=>new THREE.MeshStandardMaterial({map:m.map,color:Math.random()*0xffffff}));
+                n.material = newM.length>1?newM:newM[0];
+            }});
+        }
+
+        function restoreMaterials(obj){
+            obj.traverse(n=>{ if(n.isMesh&&n.userData.origMat) n.material=n.userData.origMat; });
+        }
+
+        function loadModel(url){
+            if(!url) return;
+            if(modelObject) scene.remove(modelObject);
+            progressDiv.style.display='block'; progressDiv.textContent='Загрузка: 0%';
+            new THREE.GLTFLoader().load(
+                url,
+                gltf=>{
+                    progressDiv.style.display='none';
+                    modelObject=gltf.scene; scene.add(modelObject);
+                    saveOriginalMaterials(modelObject);
+                    const matSet=new Set();
+                    modelObject.traverse(n=>{ if(n.isMesh&&n.material){
+                        const arr=Array.isArray(n.material)?n.material:[n.material];
+                        arr.forEach(m=>matSet.add(m.uuid));
+                    }});
+                    if(matSet.size<2){ cbRandom.checked=true; applyRandomColors(modelObject); }
+                    else if(cbRandom.checked) applyRandomColors(modelObject);
+                    adjustFrustum(modelObject);
+                    currentModel=url; saveSettings();
+                },
+                xhr=>{ if(xhr.lengthComputable){
+                        const p=Math.round(xhr.loaded/xhr.total*100);
+                        progressDiv.textContent=`Загрузка: ${p}%`;
+                    }},
+                err=>{ progressDiv.textContent='Ошибка загрузки';
+                       setTimeout(()=>progressDiv.style.display='none',2000);
+                       console.error(err); }
+            );
+        }
+
+        // Загрузка модели с локального файла
+        modelFileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const contents = e.target.result;
+                const blob = new Blob([contents], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+
+                if(modelObject) {
+                    scene.remove(modelObject);
+                    modelObject = null;
+                }
+
+                new THREE.GLTFLoader().parse(contents, '', gltf => {
+                    modelObject = gltf.scene;
+                    scene.add(modelObject);
+                    saveOriginalMaterials(modelObject);
+                    adjustFrustum(modelObject);
+                    showMessage("Модель загружена локально");
+                }, true);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function adjustFrustum(m){
+            const box=new THREE.Box3().setFromObject(m);
+            const s=box.getSize(new THREE.Vector3()).length(),
+                  c=box.getCenter(new THREE.Vector3());
+            controls.target.copy(c);
+            perspCam.position.copy(c.clone().add(new THREE.Vector3(0,s,s)));
+            orthoCam.position.copy(c.clone().add(new THREE.Vector3(0,s,s)));
+            controls.update();
+            frustumSize=s*1.2; onResize();
+        }
+
+        function saveSettings(){
+            const s={
+                ambient:+ambSlider.value,
+                directional:+dirSlider.value,
+                bgColor:currentBgColor,
+                axes:cbAxes.checked,
+                grid:cbGrid.checked,
+                randomColors:cbRandom.checked,
+                showNames:cbShowNames.checked,
+                crosshair:cbCrosshair.checked,
+                cameraType:cameraSelect.value,
+                model:currentModel
+            };
+            localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
+        }
+
+        function loadSettings(){
+            const raw=localStorage.getItem(STORAGE_KEY);
+            if(!raw) return;
+            try{
+                const s=JSON.parse(raw);
+                ambSlider.value=s.ambient; ambientLight.intensity=s.ambient;
+                dirSlider.value=s.directional; directionalLight.intensity=s.directional;
+                currentBgColor=s.bgColor; renderer.setClearColor(new THREE.Color(currentBgColor));
+                cbAxes.checked=s.axes; axesHelper.visible=s.axes;
+                cbGrid.checked=s.grid; gridHelper.visible=s.grid;
+                cbRandom.checked=s.randomColors;
+                cbShowNames.checked=s.showNames;
+                cbCrosshair.checked=s.crosshair??true;
+                crosshair.style.display=cbCrosshair.checked?'block':'none';
+                cameraSelect.value=s.cameraType; applyCamera(s.cameraType);
+                currentModel=s.model; updateCrosshairColor();
+            } catch{}
+        }
+
+        function applyCamera(m){ camera=m==='ortho'?orthoCam:perspCam; controls.object=camera; controls.update(); }
+
+        // UI handlers
+        ambSlider.oninput    = e=>{ ambientLight.intensity=+e.target.value; saveSettings(); };
+        dirSlider.oninput    = e=>{ directionalLight.intensity=+e.target.value; saveSettings(); };
+        colorOpts.forEach(o=>o.onclick=()=>{
+            currentBgColor=o.dataset.color;
+            renderer.setClearColor(new THREE.Color(currentBgColor));
+            updateCrosshairColor(); saveSettings();
+        });
+        cbAxes.onchange      = e=>{ axesHelper.visible=e.target.checked; saveSettings(); };
+        cbGrid.onchange      = e=>{ gridHelper.visible=e.target.checked; saveSettings(); };
+        cbRandom.onchange    = ()=>{ modelObject&&(cbRandom.checked?applyRandomColors(modelObject):restoreMaterials(modelObject)); saveSettings(); };
+        cbShowNames.onchange = ()=>{ saveSettings(); };
+        cbCrosshair.onchange = e=>{ crosshair.style.display=e.target.checked?'block':'none'; saveSettings(); };
+        cameraSelect.onchange= e=>{ applyCamera(e.target.value); saveSettings(); };
+        modelSelect.addEventListener('change',e=>{ if(e.target.value!==currentModel) loadModel(e.target.value); });
+        toggleMenu.onclick   = ()=>{ menu.style.display=menu.style.display==='block'?'none':'block'; };
+        resetBtn.onclick     = ()=>{ camera.position.set(0,0,5); controls.target.set(0,0,0); controls.update(); saveSettings(); };
+        clearCacheBtn.onclick= ()=>{
+            localStorage.clear();
+            location.reload();
+        };
+        document.addEventListener('click',e=>{ if(!menu.contains(e.target)&&e.target!==toggleMenu) menu.style.display='none'; });
+
+        // Hotkeys
+        document.addEventListener('keydown',e=>{
+            if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+            let acted=false;
+            switch(e.code){
+                case 'Digit1':case 'Digit2':case 'Digit3':case 'Digit4':
+                case 'Digit5':case 'Digit6':case 'Digit7':case 'Digit8':
+                case 'Digit9':case 'Digit0':
+                    const idx=e.code==='Digit0'?9:(parseInt(e.code.slice(5))-1);
+                    if(modelSelect.options.length>idx){
+                        modelSelect.selectedIndex=idx;
+                        modelSelect.dispatchEvent(new Event('change'));
+                        showMessage(`Модель ${idx+1}`);
+                    }
+                    return;
+                case 'KeyC':
+                    const bgList=['#000000','#FFFFFF','#3498db','#9b59b6','#2ecc71','#e74c3c','#95a5a6','#89CFF0'];
+                    let bi=bgList.indexOf(currentBgColor);
+                    bi=(bi+1)%bgList.length;
+                    currentBgColor=bgList[bi];
+                    renderer.setClearColor(new THREE.Color(currentBgColor));
+                    updateCrosshairColor(); saveSettings();
+                    showMessage(`Фон: ${currentBgColor}`);
+                    acted=true; break;
+                case 'KeyA':
+                    cbAxes.checked=!cbAxes.checked;
+                    axesHelper.visible=cbAxes.checked; saveSettings();
+                    showMessage(cbAxes.checked?'Оси ON':'Оси OFF');
+                    acted=true; break;
+                case 'KeyG':
+                    cbGrid.checked=!cbGrid.checked;
+                    gridHelper.visible=cbGrid.checked; saveSettings();
+                    showMessage(cbGrid.checked?'Сетка ON':'Сетка OFF');
+                    acted=true; break;
+                case 'KeyN':
+                    cbShowNames.checked=!cbShowNames.checked; saveSettings();
+                    showMessage(cbShowNames.checked?'Имена ON':'Имена OFF');
+                    acted=true; break;
+                case 'KeyH':
+                    cbCrosshair.checked=!cbCrosshair.checked;
+                    crosshair.style.display=cbCrosshair.checked?'block':'none';
+                    saveSettings();
+                    showMessage(cbCrosshair.checked?'Перекрестие ON':'Перекрестие OFF');
+                    acted=true; break;
+                case 'KeyR':
+                    cbRandom.checked=!cbRandom.checked;
+                    modelObject&&(cbRandom.checked?applyRandomColors(modelObject):restoreMaterials(modelObject));
+                    saveSettings();
+                    showMessage(cbRandom.checked?'Random ON':'Random OFF');
+                    acted=true; break;
+                case 'KeyM':
+                    const mode=cameraSelect.value==='persp'?'ortho':'persp';
+                    cameraSelect.value=mode; applyCamera(mode); saveSettings();
+                    showMessage(mode==='persp'?'Камера: перспектива':'Камера: орто');
+                    acted=true; break;
+                case 'KeyU':case 'KeyJ':
+                    {
+                        let v=parseFloat(ambSlider.value);
+                        v+=(e.code==='KeyU'?0.1:-0.1);
+                        v=Math.min(1,Math.max(0,v));
+                        ambSlider.value=v.toFixed(1); ambientLight.intensity=v;
+                        saveSettings(); showMessage(`Ambient: ${v.toFixed(1)}`);
+                        acted=true;
+                    } break;
+                case 'KeyI':case 'KeyK':
+                    {
+                        let v=parseFloat(dirSlider.value);
+                        v+=(e.code==='KeyI'?0.1:-0.1);
+                        v=Math.min(1,Math.max(0,v));
+                        dirSlider.value=v.toFixed(1); directionalLight.intensity=v;
+                        saveSettings(); showMessage(`Directional: ${v.toFixed(1)}`);
+                        acted=true;
+                    } break;
+            }
+            if(acted) e.preventDefault();
+        });
+
+        function showMessage(text){
+            const msg=document.createElement('div');
+            msg.textContent=text;
+            Object.assign(msg.style,{
+                position:'absolute',bottom:'20px',right:'20px',
+                padding:'6px 10px',background:'rgba(40,40,40,0.8)',
+                color:'#fff',borderRadius:'4px',fontSize:'13px',
+                zIndex:300,opacity:0,transition:'opacity 0.3s'
+            });
+            document.body.appendChild(msg);
+            requestAnimationFrame(()=>msg.style.opacity=1);
+            setTimeout(()=>{
+                msg.style.opacity=0;
+                msg.addEventListener('transitionend',()=>msg.remove());
+            },1200);
+        }
+
+        function onResize(){
+            aspect=window.innerWidth/window.innerHeight;
+            renderer.setSize(window.innerWidth,window.innerHeight);
+            perspCam.aspect=aspect; perspCam.updateProjectionMatrix();
+            orthoCam.left=-frustumSize*aspect/2; orthoCam.right=frustumSize*aspect/2;
+            orthoCam.top=frustumSize/2; orthoCam.bottom=-frustumSize/2; orthoCam.updateProjectionMatrix();
+        }
+
+        window.addEventListener('resize',onResize);
+
+        function animate(){
+            requestAnimationFrame(animate);
+            controls.update();
+            if(cbShowNames.checked&&modelObject){
+                raycaster.setFromCamera(pointer,camera);
+                const hits=raycaster.intersectObject(modelObject,true);
+                if(hits.length){
+                    const mesh=hits[0].object;
+                    if(highlightBox) scene.remove(highlightBox);
+                    highlightBox=new THREE.BoxHelper(mesh,0xffff00); scene.add(highlightBox);
+                    if(mesh.name){
+                        const p=hits[0].point.clone().project(camera);
+                        objectLabel.style.left=((p.x+1)/2*window.innerWidth)+'px';
+                        objectLabel.style.top =(( -p.y+1)/2*window.innerHeight)+'px';
+                        objectLabel.textContent=mesh.name; objectLabel.style.display='block';
+                    } else objectLabel.style.display='none';
+                } else {
+                    if(highlightBox) scene.remove(highlightBox);
+                    objectLabel.style.display='none';
+                }
+            } else {
+                if(highlightBox) scene.remove(highlightBox);
+                objectLabel.style.display='none';
+            }
+            renderer.render(scene,camera);
+        }
+
+        loadSettings();
+        populateModelList();
+        onResize();
+        animate();
+    </script>
+</body>
+</html>
